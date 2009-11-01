@@ -73,6 +73,7 @@ struct ttm_lock {
 	uint32_t flags;
 	bool kill_takers;
 	int signal;
+	struct ttm_object_file *vt_holder;
 };
 
 
@@ -189,14 +190,12 @@ extern int ttm_vt_lock(struct ttm_lock *lock, bool interruptible,
  * ttm_vt_unlock
  *
  * @lock: Pointer to a struct ttm_lock
- * @tfile: Pointer to a struct ttm_object_file with which the lock is
- * registered.
  *
  * Releases a vt lock.
  * Returns:
  * -EINVAL If the lock was not held.
  */
-extern int ttm_vt_unlock(struct ttm_lock *lock, struct ttm_object_file *tfile);
+extern int ttm_vt_unlock(struct ttm_lock *lock);
 
 /**
  * ttm_write_unlock

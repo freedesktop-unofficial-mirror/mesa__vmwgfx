@@ -423,10 +423,17 @@ int vmw_execbuf_ioctl(struct drm_device *dev, void *data,
 	void *cmd;
 	uint32_t sequence;
 	struct vmw_sw_context *sw_context = &dev_priv->ctx;
+	struct vmw_master *vmaster = vmw_master(file_priv->master);
+
+	ret = ttm_read_lock(&vmaster->lock, true);
+	if (unlikely(ret != 0))
+		return ret;
 
 	ret = mutex_lock_interruptible(&dev_priv->cmdbuf_mutex);
-	if (unlikely(ret != 0))
-		return -ERESTART;
+	if (unlikely(ret != 0)) {
+		ret = -ERESTART;
+		goto out_no_cmd_mutex;
+	}
 
 	cmd = vmw_fifo_reserve(dev_priv, arg->command_size);
 	if (unlikely(cmd == NULL)) {
@@ -495,7 +502,7 @@ int vmw_execbuf_ioctl(struct drm_device *dev, void *data,
 	ret = copy_to_user(user_fence_rep, &fence_rep, sizeof(fence_rep));
 
 	vmw_kms_cursor_post_execbuf(dev_priv);
-
+	ttm_read_unlock(&vmaster->lock);
 	return 0;
 out_err:
 	vmw_free_relocations(sw_context);
@@ -505,5 +512,7 @@ out_commit:
 	vmw_fifo_commit(dev_priv, 0);
 out_unlock:
 	mutex_unlock(&dev_priv->cmdbuf_mutex);
+out_no_cmd_mutex:
+	ttm_read_unlock(&vmaster->lock);
 	return ret;
 }

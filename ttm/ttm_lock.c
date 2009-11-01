@@ -65,6 +65,11 @@ static bool __ttm_read_lock(struct ttm_lock *lock)
 	bool locked = false;
 
 	spin_lock(&lock->lock);
+	if (unlikely(lock->kill_takers)) {
+		send_sig(lock->signal, current, 0);
+		spin_unlock(&lock->lock);
+		return false;
+	}
 	if (lock->rw >= 0 && lock->flags == 0) {
 		++lock->rw;
 		locked = true;
@@ -92,6 +97,11 @@ static bool __ttm_read_trylock(struct ttm_lock *lock, bool *locked)
 	*locked = false;
 
 	spin_lock(&lock->lock);
+	if (unlikely(lock->kill_takers)) {
+		send_sig(lock->signal, current, 0);
+		spin_unlock(&lock->lock);
+		return false;
+	}
 	if (lock->rw >= 0 && lock->flags == 0) {
 		++lock->rw;
 		block = false;
@@ -136,6 +146,11 @@ static bool __ttm_write_lock(struct ttm_lock *lock)
 	bool locked = false;
 
 	spin_lock(&lock->lock);
+	if (unlikely(lock->kill_takers)) {
+		send_sig(lock->signal, current, 0);
+		spin_unlock(&lock->lock);
+		return false;
+	}
 	if (lock->rw == 0 && ((lock->flags & ~TTM_WRITE_LOCK_PENDING) == 0)) {
 		lock->rw = -1;
 		lock->flags &= ~TTM_WRITE_LOCK_PENDING;
@@ -245,15 +260,17 @@ int ttm_vt_lock(struct ttm_lock *lock,
 				   ttm_lock_type, &ttm_vt_lock_remove, NULL);
 	if (ret)
 		(void)__ttm_vt_unlock(lock);
-	else
-	    printk(KERN_INFO TTM_PFX "vt lock.\n");
+	else {
+		lock->vt_holder = tfile;
+		printk(KERN_INFO TTM_PFX "vt lock.\n");
+	}
 
 	return ret;
 }
 
-int ttm_vt_unlock(struct ttm_lock *lock, struct ttm_object_file *tfile)
+int ttm_vt_unlock(struct ttm_lock *lock)
 {
-	return ttm_ref_object_base_unref(tfile,
+	return ttm_ref_object_base_unref(lock->vt_holder,
 					 lock->base.hash.key, TTM_REF_USAGE);
 }
 

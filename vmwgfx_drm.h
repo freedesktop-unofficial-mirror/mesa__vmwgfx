@@ -33,7 +33,6 @@
 
 #define DRM_VMW_EXT_NAME_LEN 128
 
-#define DRM_VMW_VT                   0
 #define DRM_VMW_GET_PARAM            1
 #define DRM_VMW_EXTENSION            2
 #define DRM_VMW_CREATE_CONTEXT       3
@@ -46,24 +45,6 @@
 #define DRM_VMW_UNREF_DMABUF         10
 #define DRM_VMW_FIFO_DEBUG           11
 #define DRM_VMW_FENCE_WAIT           12
-
-/*************************************************************************/
-/**
- * DRM_VMW_VT -  Virtual Terminal Switch for X server.
- */
-
-/**
- * struct drm_vmw_vt_arg
- *
- * @enter: Boolean whether to enter or leave VT. // In
- *
- * Argument to the DRM_VMW_VT Ioctl.
- */
-
-struct drm_vmw_vt_arg {
-	int32_t enter;
-	uint32_t pad64;
-};
 
 /*************************************************************************/
 /**

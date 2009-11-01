@@ -851,6 +851,7 @@ int vmw_dmabuf_alloc_ioctl(struct drm_device *dev, void *data,
 	struct drm_vmw_dmabuf_rep *rep = &arg->rep;
 	struct vmw_user_dma_buffer *vmw_user_bo;
 	struct ttm_buffer_object *tmp;
+	struct vmw_master *vmaster = vmw_master(file_priv->master);
 	uint32_t placement = TTM_PL_FLAG_SYSTEM | TTM_PL_FLAG_CACHED;
 	int ret;
 
@@ -859,7 +860,7 @@ int vmw_dmabuf_alloc_ioctl(struct drm_device *dev, void *data,
 		return -ENOMEM;
 	}
 
-	ret = ttm_read_lock(&dev_priv->ttm_lock, true);
+	ret = ttm_read_lock(&vmaster->lock, true);
 	if (unlikely(ret != 0)) {
 		kfree(vmw_user_bo);
 		return ret;
@@ -886,7 +887,7 @@ int vmw_dmabuf_alloc_ioctl(struct drm_device *dev, void *data,
 	}
 	ttm_bo_unref(&tmp);
 
-	ttm_read_unlock(&dev_priv->ttm_lock);
+	ttm_read_unlock(&vmaster->lock);
 
 	return 0;
 }

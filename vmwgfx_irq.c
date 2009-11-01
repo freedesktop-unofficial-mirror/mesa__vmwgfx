@@ -72,6 +72,9 @@ bool vmw_fence_signaled(struct vmw_private *dev_priv,
 	struct vmw_fifo_state *fifo_state;
 	bool ret;
 
+	if (likely(dev_priv->last_read_sequence - sequence < VMW_FENCE_WRAP))
+		return true;
+
 	dev_priv->last_read_sequence = ioread32(fifo_mem + SVGA_FIFO_FENCE);
 	if (likely(dev_priv->last_read_sequence - sequence < VMW_FENCE_WRAP))
 		return true;

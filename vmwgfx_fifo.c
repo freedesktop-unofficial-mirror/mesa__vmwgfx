@@ -66,8 +66,6 @@ int vmw_fifo_init(struct vmw_private *dev_priv, struct vmw_fifo_state *fifo)
 	DRM_INFO("bpp %d\n", vmw_read(dev_priv, SVGA_REG_BITS_PER_PIXEL));
 
 	mutex_lock(&dev_priv->hw_mutex);
-	if (dev_priv->capabilities & SVGA_CAP_TRACES)
-		dev_priv->traces_state = vmw_read(dev_priv, SVGA_REG_TRACES);
 	dev_priv->enable_state = vmw_read(dev_priv, SVGA_REG_ENABLE);
 	dev_priv->config_done_state = vmw_read(dev_priv, SVGA_REG_CONFIG_DONE);
 	vmw_write(dev_priv, SVGA_REG_ENABLE, 1);
@@ -90,8 +88,6 @@ int vmw_fifo_init(struct vmw_private *dev_priv, struct vmw_fifo_state *fifo)
 	mb();
 
 	vmw_write(dev_priv, SVGA_REG_CONFIG_DONE, 1);
-	if (dev_priv->capabilities & SVGA_CAP_TRACES)
-		vmw_write(dev_priv, SVGA_REG_TRACES, 1);
 	mutex_unlock(&dev_priv->hw_mutex);
 	
 	max = ioread32(fifo_mem+ SVGA_FIFO_MAX);
@@ -130,10 +126,15 @@ void vmw_fifo_ping_host(struct vmw_private *dev_priv, uint32_t reason)
 
 void vmw_fifo_release(struct vmw_private *dev_priv, struct vmw_fifo_state *fifo)
 {
+	__le32 __iomem *fifo_mem = dev_priv->mmio_virt;
+
 	mutex_lock(&dev_priv->hw_mutex);
-	if (dev_priv->capabilities & SVGA_CAP_TRACES)
-		vmw_write(dev_priv, SVGA_REG_TRACES,
-			  dev_priv->traces_state);
+
+	while (vmw_read(dev_priv, SVGA_REG_BUSY) != 0)
+		vmw_write(dev_priv, SVGA_REG_SYNC, SVGA_SYNC_GENERIC);
+
+	dev_priv->last_read_sequence = ioread32(fifo_mem + SVGA_FIFO_FENCE);
+
 	vmw_write(dev_priv, SVGA_REG_CONFIG_DONE,
 		  dev_priv->config_done_state);
 	vmw_write(dev_priv, SVGA_REG_ENABLE,

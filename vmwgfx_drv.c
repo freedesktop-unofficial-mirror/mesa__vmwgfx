@@ -94,8 +94,6 @@
  */
 
 static struct drm_ioctl_desc vmw_ioctls[] = {
-	VMW_IOCTL_DEF(DRM_IOCTL_VMW_VT, vmw_vt_ioctl,
-		      DRM_ROOT_ONLY | DRM_MASTER),
 	VMW_IOCTL_DEF(DRM_IOCTL_VMW_GET_PARAM, vmw_getparam_ioctl, 0),
 	VMW_IOCTL_DEF(DRM_IOCTL_VMW_EXTENSION, vmw_extension_ioctl, 0),
 	VMW_IOCTL_DEF(DRM_IOCTL_VMW_CREATE_CONTEXT, vmw_context_define_ioctl,
@@ -128,6 +126,7 @@ static struct pci_device_id vmw_pci_id_list[] =
 static char *vmw_devname = "vmwgfx";
 
 static int vmw_probe(struct pci_dev *, const struct pci_device_id *);
+static void vmw_master_init(struct vmw_master *);
 
 static void vmw_print_capabilities(uint32_t capabilities)
 {
@@ -164,7 +163,6 @@ static void vmw_print_capabilities(uint32_t capabilities)
 
 static int vmw_request_device(struct vmw_private *dev_priv)
 {
-	struct drm_device *dev = dev_priv->dev;
 	int ret;
 
 	vmw_kms_save_vga(dev_priv);
@@ -172,43 +170,25 @@ static int vmw_request_device(struct vmw_private *dev_priv)
 	ret = vmw_fifo_init(dev_priv, &dev_priv->fifo);
 	if (unlikely(ret != 0)) {
 		DRM_ERROR("Unable to initialize FIFO.\n");
-		goto out_no_fifo;
-	}
-
-	if (!dev->devname)
-		dev->devname = vmw_devname;
-
-	ret = drm_irq_install(dev);
-	if (unlikely(ret != 0)) {
-		DRM_ERROR("Failed installing irq: %d\n", ret);
-		goto out_no_irq;
+		return ret;
 	}
 
 	return 0;
-
-out_no_irq:
-	vmw_fifo_release(dev_priv, &dev_priv->fifo);
-out_no_fifo:
-	return ret;
 }
 
 static void vmw_release_device(struct vmw_private *dev_priv)
 {
-	struct drm_device *dev = dev_priv->dev;
-
-	drm_irq_uninstall(dev_priv->dev);
-	if (dev->devname == vmw_devname)
-		dev->devname = NULL;
 	vmw_fifo_release(dev_priv, &dev_priv->fifo);
 	vmw_kms_restore_vga(dev_priv);
 }
+
 
 static int vmw_driver_load(struct drm_device *dev, unsigned long chipset)
 {
 	struct vmw_private *dev_priv;
 	int ret;
 
-	dev_priv = kmalloc(sizeof(*dev_priv), GFP_KERNEL);
+	dev_priv = kzalloc(sizeof(*dev_priv), GFP_KERNEL);
 	if (unlikely(dev_priv == NULL)) {
 		DRM_ERROR("Failed allocating a device private struct.\n");
 		return -ENOMEM;
@@ -264,8 +244,11 @@ static int vmw_driver_load(struct drm_device *dev, unsigned long chipset)
 	if (unlikely(ret != 0))
 		goto out_err0;
 
-	ttm_lock_init(&dev_priv->ttm_lock);
-	ttm_lock_set_kill(&dev_priv->ttm_lock, false, SIGTERM);
+
+	vmw_master_init(&dev_priv->fbdev_master);
+	ttm_lock_set_kill(&dev_priv->fbdev_master.lock, false, SIGTERM);
+	dev_priv->active_master = &dev_priv->fbdev_master;
+
 
 	ret = ttm_bo_device_init(&dev_priv->bdev,
 				 dev_priv->bo_global_ref.ref.object,
@@ -313,16 +296,24 @@ static int vmw_driver_load(struct drm_device *dev, unsigned long chipset)
 
 	dev->dev_private = dev_priv;
 
+	if (!dev->devname)
+		dev->devname = vmw_devname;
+
+	ret = drm_irq_install(dev);
+	if (unlikely(ret != 0)) {
+		DRM_ERROR("Failed installing irq: %d\n", ret);
+		goto out_no_irq;
+	}
+
 	ret = pci_request_regions(dev->pdev, "vmwgfx probe");
 	dev_priv->stealth = (ret != 0);
 	if (dev_priv->stealth) {
-
-		/*
-		 * Request at least the mmio bar.
+		/**
+		 * Request at least the mmio PCI resource.
 		 */
 
 		DRM_INFO("It appears like vesafb is loaded. "
-			 "Entering stealth mode.\n");
+			 "Ignore above error if any. Entering stealth mode.\n");
 		ret = pci_request_region(dev->pdev, 2, "vmwgfx stealth probe");
 		if (unlikely(ret != 0)) {
 			DRM_ERROR("Failed reserving the SVGA MMIO resource.\n");
@@ -340,6 +331,10 @@ static int vmw_driver_load(struct drm_device *dev, unsigned long chipset)
 	return 0;
 
 out_no_device:
+	drm_irq_uninstall(dev_priv->dev);
+	if (dev->devname == vmw_devname)
+		dev->devname = NULL;
+out_no_irq:
 	ttm_object_device_release(&dev_priv->tdev);
 out_err4:
 	iounmap(dev_priv->mmio_virt);
@@ -374,7 +369,9 @@ static int vmw_driver_unload(struct drm_device *dev)
 		vmw_kms_close(dev_priv);
 		pci_release_region(dev->pdev, 2);
 	}
-
+	drm_irq_uninstall(dev_priv->dev);
+	if (dev->devname == vmw_devname)
+		dev->devname = NULL;
 	ttm_object_device_release(&dev_priv->tdev);
 	iounmap(dev_priv->mmio_virt);
 	drm_mtrr_del(dev_priv->mmio_mtrr, dev_priv->mmio_start,
@@ -391,40 +388,31 @@ static int vmw_driver_unload(struct drm_device *dev)
 	return 0;
 }
 
-static int vmw_release(struct inode *inode, struct file *filp)
+static void vmw_postclose(struct drm_device *dev,
+			 struct drm_file *file_priv)
 {
-	struct drm_file *file_priv;
 	struct vmw_fpriv *vmw_fp;
 
-	file_priv = (struct drm_file *)filp->private_data;
 	vmw_fp = vmw_fpriv(file_priv);
 	ttm_object_file_release(&vmw_fp->tfile);
+	if (vmw_fp->locked_master)
+		drm_master_put(&vmw_fp->locked_master);
 	kfree(vmw_fp);
-	return drm_release(inode, filp);
 }
 
-static int vmw_open(struct inode *inode, struct file *filp)
+static int vmw_driver_open(struct drm_device *dev, struct drm_file *file_priv)
 {
-	struct drm_file *file_priv;
-	struct vmw_private *dev_priv;
+	struct vmw_private *dev_priv = vmw_priv(dev);
 	struct vmw_fpriv *vmw_fp;
-	int ret;
-
-	ret = drm_open(inode, filp);
-	if (unlikely(ret))
-		return ret;
+	int ret = -ENOMEM;
 
 	vmw_fp = kzalloc(sizeof(*vmw_fp), GFP_KERNEL);
-
 	if (unlikely(vmw_fp == NULL))
-		goto out_err0;
-
-	file_priv = (struct drm_file *)filp->private_data;
-	dev_priv = vmw_priv(file_priv->minor->dev);
+		return ret;
 
 	vmw_fp->tfile = ttm_object_file_init(dev_priv->tdev, 10);
 	if (unlikely(vmw_fp->tfile == NULL))
-		goto out_err1;
+		goto out_no_tfile;
 
 	file_priv->driver_priv = vmw_fp;
 
@@ -433,10 +421,8 @@ static int vmw_open(struct inode *inode, struct file *filp)
 
 	return 0;
 
-out_err1:
+out_no_tfile:
 	kfree(vmw_fp);
-out_err0:
-	(void)drm_release(inode, filp);
 	return ret;
 }
 
@@ -480,15 +466,9 @@ static long vmw_unlocked_ioctl(struct file *filp, unsigned int cmd,
 static int vmw_firstopen(struct drm_device *dev)
 {
 	struct vmw_private *dev_priv = vmw_priv(dev);
-	int ret = 0;
+	dev_priv->is_opened = true;
 
-	if (dev_priv->stealth)
-		ret = vmw_request_device(dev_priv);
-
-	if (!ret)
-		dev_priv->is_opened = true;
-
-	return ret;
+	return 0;
 }
 
 static void vmw_lastclose(struct drm_device *dev)
@@ -519,26 +499,130 @@ static void vmw_lastclose(struct drm_device *dev)
 		WARN_ON(ret != 0);
 	}
 
-	if (!dev_priv->stealth)
-		vmw_fb_on(dev_priv);
-	else
-		vmw_release_device(dev_priv);
 }
 
-int vmw_vt_ioctl(struct drm_device *dev, void *data, struct drm_file *file_priv)
+static void vmw_master_init(struct vmw_master *vmaster)
 {
-	struct vmw_private *dev_priv = vmw_priv(dev);
-	struct drm_vmw_vt_arg *arg = (struct drm_vmw_vt_arg *)data;
+	ttm_lock_init(&vmaster->lock);
+}
 
-	if (!dev_priv->stealth)
-		return 0;
+static int vmw_master_create(struct drm_device *dev,
+			     struct drm_master *master)
+{
+	struct vmw_master *vmaster;
 
-	if (arg->enter)
-		return vmw_request_device(dev_priv);
-	else
-		vmw_release_device(dev_priv);
+	DRM_INFO("Master create.\n");
+	vmaster = kzalloc(sizeof(*vmaster), GFP_KERNEL);
+	if (unlikely(vmaster == NULL))
+		return -ENOMEM;
+
+	ttm_lock_init(&vmaster->lock);
+	ttm_lock_set_kill(&vmaster->lock, true, SIGTERM);
+	master->driver_priv = vmaster;
 
 	return 0;
+}
+
+static void vmw_master_destroy(struct drm_device *dev,
+			       struct drm_master *master)
+{
+	struct vmw_master *vmaster = vmw_master(master);
+
+	DRM_INFO("Master destroy.\n");
+	master->driver_priv = NULL;
+	kfree(vmaster);
+}
+
+
+static int vmw_master_set(struct drm_device *dev,
+			  struct drm_file *file_priv,
+			  bool from_open)
+{
+	struct vmw_private *dev_priv = vmw_priv(dev);
+	struct vmw_fpriv *vmw_fp = vmw_fpriv(file_priv);
+	struct vmw_master *active = dev_priv->active_master;
+	struct vmw_master *vmaster = vmw_master(file_priv->master);
+	int ret = 0;
+
+	DRM_INFO("Master set.\n");
+	if (dev_priv->stealth) {
+		ret = vmw_request_device(dev_priv);
+		if (unlikely(ret != 0))
+			return ret;
+	}
+
+	if (active) {
+		BUG_ON(active != &dev_priv->fbdev_master);
+		ret = ttm_vt_lock(&active->lock, false, vmw_fp->tfile);
+		if (unlikely(ret != 0))
+			goto out_no_active_lock;
+
+		ttm_lock_set_kill(&active->lock, true, SIGTERM);
+		ret = ttm_bo_evict_mm(&dev_priv->bdev, TTM_PL_VRAM);
+		if (unlikely(ret != 0)) {
+			DRM_ERROR("Unable to clean VRAM on "
+				  "master drop.\n");
+		}
+
+		dev_priv->active_master = NULL;
+	}
+
+	ttm_lock_set_kill(&vmaster->lock, false, SIGTERM);
+	if (!from_open) {
+		ttm_vt_unlock(&vmaster->lock);
+		BUG_ON(vmw_fp->locked_master != file_priv->master);
+		drm_master_put(&vmw_fp->locked_master);
+	}
+
+	dev_priv->active_master = vmaster;
+
+	return 0;
+
+out_no_active_lock:
+	vmw_release_device(dev_priv);
+	return ret;
+}
+
+static void vmw_master_drop(struct drm_device *dev,
+			    struct drm_file *file_priv,
+			    bool from_release)
+{
+	struct vmw_private *dev_priv = vmw_priv(dev);
+	struct vmw_fpriv *vmw_fp = vmw_fpriv(file_priv);
+	struct vmw_master *vmaster = vmw_master(file_priv->master);
+	int ret;
+
+	DRM_INFO("Master drop.\n");
+
+	/**
+	 * Make sure the master doesn't disappear while we have
+	 * it locked.
+	 */
+
+	vmw_fp->locked_master = drm_master_get(file_priv->master);
+	ret = ttm_vt_lock(&vmaster->lock, false, vmw_fp->tfile);
+
+	if (unlikely((ret != 0))) {
+		DRM_ERROR("Unable to lock TTM at VT switch.\n");
+		drm_master_put(&vmw_fp->locked_master);
+	}
+
+	ttm_lock_set_kill(&vmaster->lock, true, SIGTERM);
+
+	if (dev_priv->stealth) {
+		ret = ttm_bo_evict_mm(&dev_priv->bdev, TTM_PL_VRAM);
+		if (unlikely(ret != 0)) {
+			    DRM_ERROR("Unable to clean VRAM on "
+				      "master drop.\n");
+		}
+		vmw_release_device(dev_priv);
+	}
+	dev_priv->active_master = &dev_priv->fbdev_master;
+	ttm_lock_set_kill(&dev_priv->fbdev_master.lock, false, SIGTERM);
+	ttm_vt_unlock(&dev_priv->fbdev_master.lock);
+
+	if (!dev_priv->stealth)
+		vmw_fb_on(dev_priv);
 }
 
 
@@ -566,10 +650,16 @@ static struct drm_driver driver = {
 	.ioctls = vmw_ioctls,
 	.num_ioctls = DRM_ARRAY_SIZE(vmw_ioctls),
 	.dma_quiescent = NULL,	/*vmw_dma_quiescent, */
+	.master_create = vmw_master_create,
+	.master_destroy = vmw_master_destroy,
+	.master_set = vmw_master_set,
+	.master_drop = vmw_master_drop,
+	.open = vmw_driver_open,
+	.postclose = vmw_postclose,
 	.fops = {
 		 .owner = THIS_MODULE,
-		 .open = vmw_open,
-		 .release = vmw_release,
+		 .open = drm_open,
+		 .release = drm_release,
 		 .unlocked_ioctl = vmw_unlocked_ioctl,
 		 .mmap = vmw_mmap,
 		 .poll = drm_poll,

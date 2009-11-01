@@ -53,6 +53,7 @@ extern void vmwgfx_exit(void);
 #endif
 
 struct vmw_fpriv {
+	struct drm_master *locked_master;
 	struct ttm_object_file *tfile;
 };
 
@@ -138,11 +139,14 @@ struct vmw_sw_context{
 
 struct vmw_legacy_display_system;
 
+struct vmw_master {
+	struct ttm_lock lock;
+};
+
 struct vmw_private {
 	struct ttm_bo_device bdev;
 	struct ttm_bo_global_ref bo_global_ref;
 	struct ttm_global_reference mem_global_ref;
-	struct ttm_lock ttm_lock;
 
 	struct vmw_fifo_state fifo;
 
@@ -248,6 +252,13 @@ struct vmw_private {
 
 	bool stealth;
 	bool is_opened;
+
+	/**
+	 * Master management.
+	 */
+
+	struct vmw_master *active_master;
+	struct vmw_master fbdev_master;
 };
 
 static inline struct vmw_private *vmw_priv(struct drm_device *dev)
@@ -258,6 +269,11 @@ static inline struct vmw_private *vmw_priv(struct drm_device *dev)
 static inline struct vmw_fpriv *vmw_fpriv(struct drm_file *file_priv)
 {
 	return (struct vmw_fpriv *)file_priv->driver_priv;
+}
+
+static inline struct vmw_master *vmw_master(struct drm_master *master)
+{
+	return (struct vmw_master *) master->driver_priv;
 }
 
 static inline void vmw_write(struct vmw_private *dev_priv,
@@ -343,8 +359,6 @@ extern int vmw_dmabuf_from_vram(struct vmw_private *vmw_priv,
  * Misc Ioctl functionality - vmwgfx_ioctl.c
  */
 
-extern int vmw_vt_ioctl(struct drm_device *dev, void *data,
-			struct drm_file *file_priv);
 extern int vmw_getparam_ioctl(struct drm_device *dev, void *data,
 			      struct drm_file *file_priv);
 extern int vmw_extension_ioctl(struct drm_device *dev, void *data,
