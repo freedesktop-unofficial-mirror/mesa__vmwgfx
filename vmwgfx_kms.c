@@ -27,6 +27,10 @@
 
 #include "vmwgfx_kms.h"
 
+/* Might need a hrtimer here? */
+#define VMWGFX_PRESENT_RATE ((HZ / 60 > 0) ? HZ / 60 : 1)
+
+
 void vmw_display_unit_cleanup(struct vmw_display_unit *du)
 {
 	if (du->cursor_surface)
@@ -325,6 +329,9 @@ struct vmw_framebuffer_surface
 {
 	struct vmw_framebuffer base;
 	struct vmw_surface *surface;
+	struct delayed_work d_work;
+	struct mutex work_lock;
+	bool present_fs;
 };
 
 void vmw_framebuffer_surface_destroy(struct drm_framebuffer *framebuffer)
@@ -332,11 +339,57 @@ void vmw_framebuffer_surface_destroy(struct drm_framebuffer *framebuffer)
 	struct vmw_framebuffer_surface *vfb =
 		vmw_framebuffer_to_vfbs(framebuffer);
 
+	cancel_delayed_work_sync(&vfb->d_work);
 	drm_framebuffer_cleanup(framebuffer);
 	vmw_surface_unreference(&vfb->surface);
 
 	kfree(framebuffer);
 }
+
+static void vmw_framebuffer_present_fs_callback(struct work_struct *work)
+{
+	struct delayed_work *d_work =
+		container_of(work, struct delayed_work, work);
+	struct vmw_framebuffer_surface *vfbs =
+		container_of(d_work, struct vmw_framebuffer_surface, d_work);
+	struct vmw_surface *surf = vfbs->surface;
+	struct drm_framebuffer *framebuffer = &vfbs->base.base;
+	struct vmw_private *dev_priv = vmw_priv(framebuffer->dev);
+
+	struct {
+		SVGA3dCmdHeader header;
+		SVGA3dCmdPresent body;
+		SVGA3dCopyRect cr;
+	} *cmd;
+
+	mutex_lock(&vfbs->work_lock);
+	if (!vfbs->present_fs)
+		goto out_unlock;
+
+	cmd = vmw_fifo_reserve(dev_priv, sizeof(*cmd));
+	if (unlikely(cmd == NULL))
+		goto out_resched;
+
+	cmd->header.id = cpu_to_le32(SVGA_3D_CMD_PRESENT);
+	cmd->header.size = cpu_to_le32(sizeof(cmd->body) + sizeof(cmd->cr));
+	cmd->body.sid = cpu_to_le32(surf->res.id);
+	cmd->cr.x = cpu_to_le32(0);
+	cmd->cr.y = cpu_to_le32(0);
+	cmd->cr.srcx = cmd->cr.x;
+	cmd->cr.srcy = cmd->cr.y;
+	cmd->cr.w = cpu_to_le32(framebuffer->width);
+	cmd->cr.h = cpu_to_le32(framebuffer->height);
+	vfbs->present_fs = false;
+	vmw_fifo_commit(dev_priv, sizeof(*cmd));
+out_resched:
+	/**
+	 * Will not re-add if already pending.
+	 */
+	schedule_delayed_work(&vfbs->d_work, VMWGFX_PRESENT_RATE);
+out_unlock:
+	mutex_unlock(&vfbs->work_lock);
+}
+
 
 int vmw_framebuffer_surface_dirty(struct drm_framebuffer *framebuffer,
 				  struct drm_clip_rect *clips, unsigned num_clips)
@@ -357,6 +410,22 @@ int vmw_framebuffer_surface_dirty(struct drm_framebuffer *framebuffer,
 	if (!num_clips ||
             !(dev_priv->fifo.capabilities &
 	      SVGA_FIFO_CAP_SCREEN_OBJECT)) {
+		int ret;
+
+		mutex_lock(&vfbs->work_lock);
+		vfbs->present_fs = true;
+		ret = schedule_delayed_work(&vfbs->d_work, VMWGFX_PRESENT_RATE);
+		mutex_unlock(&vfbs->work_lock);
+		if (ret) {
+			/**
+			 * No work pending, Force immediate present.
+			 */
+			vmw_framebuffer_present_fs_callback(&vfbs->d_work.work);
+		}
+		return 0;
+	}
+
+	if (!num_clips) {
 		num_clips = 1;
 		clips = &norect;
 		norect.x1 = norect.y1 = 0;
@@ -431,7 +500,8 @@ int vmw_kms_new_framebuffer_surface(struct vmw_private *dev_priv,
 	vfbs->base.pin = NULL;
 	vfbs->base.unpin = NULL;
 	vfbs->surface = surface;
-
+	mutex_init(&vfbs->work_lock);
+	INIT_DELAYED_WORK(&vfbs->d_work, &vmw_framebuffer_present_fs_callback);
 	*out = &vfbs->base;
 
 	return 0;
@@ -599,7 +669,6 @@ int vmw_kms_new_framebuffer_dmabuf(struct vmw_private *dev_priv,
 	vfbd->base.pin = vmw_framebuffer_dmabuf_pin;
 	vfbd->base.unpin = vmw_framebuffer_dmabuf_unpin;
 	vfbd->buffer = dmabuf;
-
 	*out = &vfbd->base;
 
 	return 0;
