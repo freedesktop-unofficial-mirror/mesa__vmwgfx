@@ -1,0 +1,3 @@
+BUS=="pci", ATTRS{vendor}=="0x15ad", ATTRS{device}=="0x0405",\
+ATTRS{modalias}=="pci:v000015ADd00000405sv000015ADsd00000405bc03sc00i00",\
+NAME="dri/card%n"
