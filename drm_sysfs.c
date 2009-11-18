@@ -77,7 +77,7 @@ static ssize_t version_show(struct class *dev, char *buf)
 		       CORE_MINOR, CORE_PATCHLEVEL, CORE_DATE);
 }
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,30))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,32))
 static char *drm_devnode(struct device *dev, mode_t *mode)
 {
 	return kasprintf(GFP_KERNEL, "dri/%s", dev_name(dev));
@@ -116,7 +116,7 @@ struct class *drm_sysfs_create(struct module *owner, char *name)
 	if (err)
 		goto err_out_class;
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,30))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,32))
 	class->devnode = drm_devnode;
 #endif
 
@@ -376,7 +376,8 @@ int drm_sysfs_connector_add(struct drm_connector *connector)
 		 dev->primary->index,
 		 drm_get_connector_name(connector));
 #else
-	dev_set_name(&minor->kdev, minor_str, minor->index);
+	dev_set_name(&connector->kdev, drm_get_connector_name(connector),
+		     dev->primary->index);
 #endif
 	ret = device_register(&connector->kdev);
 
