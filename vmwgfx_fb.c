@@ -31,9 +31,6 @@
 
 #include "ttm/ttm_placement.h"
 
-#define MIN(a,b) (((a)<(b))?(a):(b))
-#define MAX(a,b) (((a)>(b))?(a):(b))
-
 #define VMW_DIRTY_DELAY (HZ / 30)
 
 struct vmw_fb_par
@@ -234,8 +231,8 @@ static void vmw_fb_dirty_flush(struct vmw_fb_par *par)
 	}
 	x = par->dirty.x1;
 	y = par->dirty.y1;
-	w = MIN(par->dirty.x2, info->var.xres) - x;
-	h = MIN(par->dirty.y2, info->var.yres) - y;
+	w = min(par->dirty.x2, info->var.xres) - x;
+	h = min(par->dirty.y2, info->var.yres) - y;
 	par->dirty.x1 = par->dirty.x2 = 0;
 	par->dirty.y1 = par->dirty.y2 = 0;
 	spin_unlock_irqrestore(&par->dirty.lock, flags);
@@ -309,8 +306,8 @@ static void vmw_deferred_io(struct fb_info *info,
 	list_for_each_entry(page, pagelist, lru) {
 		start = page->index << PAGE_SHIFT;
 		end = start + PAGE_SIZE -1;
-		min = MIN(min, start);
-		max = MAX(max, end);
+		min = min(min, start);
+		max = max(max, end);
 	}
 
 	if (min < max) {
@@ -428,8 +425,8 @@ int vmw_fb_init(struct vmw_private *vmw_priv)
 
 	fb_bbp = 32;
 	fb_depth = 24;
-	fb_width = MIN(vmw_priv->fb_max_width, 2048);
-	fb_height = MIN(vmw_priv->fb_max_height, 2048);
+	fb_width = min(vmw_priv->fb_max_width, (unsigned)2048);
+	fb_height = min(vmw_priv->fb_max_height, (unsigned)2048);
 
 	vmw_write(vmw_priv, SVGA_REG_WIDTH, fb_width);
 	vmw_write(vmw_priv, SVGA_REG_HEIGHT, fb_height);

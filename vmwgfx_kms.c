@@ -27,9 +27,6 @@
 
 #include "vmwgfx_kms.h"
 
-#define MIN(a,b) (((a)<(b))?(a):(b))
-#define MAX(a,b) (((a)>(b))?(a):(b))
-
 void vmw_display_unit_cleanup(struct vmw_display_unit *du)
 {
 	if (du->cursor)
@@ -432,7 +429,7 @@ int vmw_framebuffer_dmabuf_dirty(struct drm_framebuffer *framebuffer,
 	struct vmw_framebuffer_dmabuf *vfbd = vmw_framebuffer_to_vfbd(framebuffer);
 	struct vmw_dma_buffer *buf = vfbd->buffer;
 	int i;
-	unsigned x, y, w, h;
+	unsigned short x, y, w, h;
 	struct {
 		uint32_t header;
 		SVGAFifoCmdUpdate body;
@@ -454,10 +451,10 @@ int vmw_framebuffer_dmabuf_dirty(struct drm_framebuffer *framebuffer,
 
 	/* expand dirty region to cover all clips */
 	for (i = 1; i < num_clips; i++) {
-		x = MIN(x, clips[i].x1);
-		y = MIN(y, clips[i].y1);
-		w = MAX(w, clips[i].x2);
-		h = MAX(h, clips[i].y2);
+		x = min(x, clips[i].x1);
+		y = min(y, clips[i].y1);
+		w = max(w, clips[i].x2);
+		h = max(h, clips[i].y2);
 	}
 	/* we used w and h as x2 and y2 trun them into proper width and height */
 	w = w - x;
