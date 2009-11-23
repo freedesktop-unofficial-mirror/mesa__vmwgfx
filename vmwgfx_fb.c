@@ -638,7 +638,7 @@ int vmw_dmabuf_to_start_of_vram(struct vmw_private *vmw_priv,
 	int ret = 0;
 
 	/* interuptable? */
-	ret = ttm_write_lock(&vmw_priv->fbdev_master.lock, false);
+	ret = ttm_write_lock(&vmw_priv->active_master->lock, false);
 	if (unlikely(ret != 0))
 		return ret;
 
@@ -659,7 +659,7 @@ int vmw_dmabuf_to_start_of_vram(struct vmw_private *vmw_priv,
 
 	ttm_bo_unreserve(bo);
 err_unlock:
-	ttm_write_unlock(&vmw_priv->fbdev_master.lock);
+	ttm_write_unlock(&vmw_priv->active_master->lock);
 
 	return ret;
 }
