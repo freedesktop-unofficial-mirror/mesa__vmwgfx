@@ -73,7 +73,8 @@ struct vmw_display_unit
 	struct drm_encoder encoder;
 	struct drm_connector connector;
 
-	struct vmw_surface *cursor;
+	struct vmw_surface *cursor_surface;
+	struct vmw_dma_buffer *cursor_dmabuf;
 	size_t cursor_age;
 
 	int cursor_x;

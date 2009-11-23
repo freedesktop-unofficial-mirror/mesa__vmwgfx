@@ -29,8 +29,10 @@
 
 void vmw_display_unit_cleanup(struct vmw_display_unit *du)
 {
-	if (du->cursor)
-		vmw_surface_unreference(&du->cursor);
+	if (du->cursor_surface)
+		vmw_surface_unreference(&du->cursor_surface);
+	if (du->cursor_dmabuf)
+		vmw_dmabuf_unreference(&du->cursor_dmabuf);
 	drm_crtc_cleanup(&du->crtc);
 	drm_encoder_cleanup(&du->encoder);
 	drm_connector_cleanup(&du->connector);
@@ -97,39 +99,79 @@ int vmw_du_crtc_cursor_set(struct drm_crtc *crtc, struct drm_file *file_priv,
 	struct ttm_object_file *tfile = vmw_fpriv(file_priv)->tfile;
 	struct vmw_display_unit *du = vmw_crtc_to_du(crtc);
 	struct vmw_surface *surface = NULL;
+	struct vmw_dma_buffer *dmabuf = NULL;
 	int ret;
 
 	if (handle) {
 		ret = vmw_user_surface_lookup(dev_priv, tfile,
 					      handle, &surface);
+		if (!ret) {
+			if (!surface->snooper.image) {
+				DRM_ERROR("surface not suitable for cursor\n");
+				return -EINVAL;
+			}
+		}
+		ret = vmw_user_dmabuf_lookup(tfile,
+					     handle, &dmabuf);
 		if (ret) {
-			DRM_ERROR("failed to find surface: %i\n", ret);
-			return -EINVAL;
-		}
-		if (!surface->snooper.image) {
-			DRM_ERROR("surface not suitable for cursor\n");
+			DRM_ERROR("failed to find surface or dmabuf: %i\n", ret);
 			return -EINVAL;
 		}
 	}
 
-	if (du->cursor) {
-		du->cursor->snooper.crtc = NULL;
-		vmw_surface_unreference(&du->cursor);
+	/* takedown old cursor */
+	if (du->cursor_surface) {
+		du->cursor_surface->snooper.crtc = NULL;
+		vmw_surface_unreference(&du->cursor_surface);
+	}
+	if (du->cursor_dmabuf) {
+		vmw_dmabuf_unreference(&du->cursor_dmabuf);
 	}
 
-	/* vmw_user_surface_lookup takes one reference */
-	du->cursor = surface;
+	/* setup new image */
+	if (surface) { 
+		/* vmw_user_surface_lookup takes one reference */
+		du->cursor_surface = surface;
 
-	if (du->cursor)
-		du->cursor->snooper.crtc = crtc;
+		du->cursor_surface->snooper.crtc = crtc;
+		du->cursor_age = du->cursor_surface->snooper.age;
+		vmw_cursor_update_image(dev_priv, surface->snooper.image, 64, 64);
+	} else if (dmabuf) {
+		struct ttm_bo_kmap_obj map;
+		unsigned long kmap_offset;
+		unsigned long kmap_num;
+		void *virtual;
+		bool dummy;
 
-	if (!du->cursor) {
+		/* vmw_user_surface_lookup takes one reference */
+		du->cursor_dmabuf = dmabuf;
+
+		kmap_offset = 0;
+		kmap_num = (64*64*4) >> PAGE_SHIFT;
+
+		ret = ttm_bo_reserve(&dmabuf->base, true, false, false, 0);
+		if (unlikely(ret != 0)) {
+			DRM_ERROR("reserve failed\n");
+			return -EINVAL;
+		}
+
+		ret = ttm_bo_kmap(&dmabuf->base, kmap_offset, kmap_num, &map);
+		if (unlikely(ret != 0)) {
+			goto err_unreserve;
+		}
+
+		virtual = ttm_kmap_obj_virtual(&map, &dummy);
+		vmw_cursor_update_image(dev_priv, virtual, 64, 64);
+
+		ttm_bo_kunmap(&map);
+		err_unreserve:
+		ttm_bo_unreserve(&dmabuf->base);
+
+	} else {
 		vmw_cursor_update_position(dev_priv, false, 0, 0);
 		return 0;
 	}
 
-	du->cursor_age = du->cursor->snooper.age;
-	vmw_cursor_update_image(dev_priv, surface->snooper.image, 64, 64);
 	vmw_cursor_update_position(dev_priv, true, du->cursor_x, du->cursor_y);
 
 	return 0;
@@ -139,7 +181,7 @@ int vmw_du_crtc_cursor_move(struct drm_crtc *crtc, int x, int y)
 {
 	struct vmw_private *dev_priv = vmw_priv(crtc->dev);
 	struct vmw_display_unit *du = vmw_crtc_to_du(crtc);
-	bool shown = du->cursor ? true : false;
+	bool shown = du->cursor_surface || du->cursor_dmabuf ? true : false;
 
 	du->cursor_x = x + crtc->x;
 	du->cursor_y = y + crtc->y;
@@ -244,12 +286,13 @@ void vmw_kms_cursor_post_execbuf(struct vmw_private *dev_priv)
 
 	list_for_each_entry(crtc, &dev->mode_config.crtc_list, head) {
 		du = vmw_crtc_to_du(crtc);
-		if (!du->cursor || du->cursor_age == du->cursor->snooper.age)
+		if (!du->cursor_surface ||
+		    du->cursor_age == du->cursor_surface->snooper.age)
 			continue;
 
-		du->cursor_age = du->cursor->snooper.age;
+		du->cursor_age = du->cursor_surface->snooper.age;
 		vmw_cursor_update_image(dev_priv,
-					du->cursor->snooper.image,
+					du->cursor_surface->snooper.image,
 					64, 64);
 	}
 
