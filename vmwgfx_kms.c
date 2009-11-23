@@ -310,7 +310,9 @@ int vmw_framebuffer_surface_dirty(struct drm_framebuffer *framebuffer,
 		SVGA3dCopyRect cr;
 	} *cmd;
 
-	if (!num_clips) {
+	if (!num_clips ||
+            !(dev_priv->fifo.capabilities &
+	      SVGA_FIFO_CAP_SCREEN_OBJECT)) {
 		num_clips = 1;
 		clips = &norect;
 		norect.x1 = norect.y1 = 0;
@@ -428,50 +430,41 @@ int vmw_framebuffer_dmabuf_dirty(struct drm_framebuffer *framebuffer,
 	struct vmw_private *dev_priv = vmw_priv(framebuffer->dev);
 	struct vmw_framebuffer_dmabuf *vfbd = vmw_framebuffer_to_vfbd(framebuffer);
 	struct vmw_dma_buffer *buf = vfbd->buffer;
-	int i;
-	unsigned short x, y, w, h;
+	struct drm_clip_rect norect;
 	struct {
 		uint32_t header;
 		SVGAFifoCmdUpdate body;
 	} *cmd;
+	int i;
 
+	/* XXX validate buffer */
 	(void)buf;
 
-	/* use w and h ans x2 and y2 */
-	if (num_clips) {
-		x = clips->x1;
-		y = clips->y1;
-		w = clips->x2;
-		h = clips->y2;
-	} else {
-		x = y = 0;
-		w = framebuffer->width;
-		h = framebuffer->height;
+	if (!num_clips ||
+            !(dev_priv->fifo.capabilities &
+	      SVGA_FIFO_CAP_SCREEN_OBJECT)) {
+		num_clips = 1;
+		clips = &norect;
+		norect.x1 = norect.y1 = 0;
+		norect.x2 = framebuffer->width;
+		norect.y2 = framebuffer->height;
 	}
 
-	/* expand dirty region to cover all clips */
-	for (i = 1; i < num_clips; i++) {
-		x = min(x, clips[i].x1);
-		y = min(y, clips[i].y1);
-		w = max(w, clips[i].x2);
-		h = max(h, clips[i].y2);
-	}
-	/* we used w and h as x2 and y2 trun them into proper width and height */
-	w = w - x;
-	h = h - y;
-
-	cmd = vmw_fifo_reserve(dev_priv, sizeof(*cmd));
+	cmd = vmw_fifo_reserve(dev_priv, sizeof(*cmd) * num_clips);
 	if (unlikely(cmd == NULL)) {
 		DRM_ERROR("Fifo reserve failed.\n");
 		return -ENOMEM;
 	}
 
-	cmd->header = cpu_to_le32(SVGA_CMD_UPDATE);
-	cmd->body.x = cpu_to_le32(x);
-	cmd->body.y = cpu_to_le32(y);
-	cmd->body.width = cpu_to_le32(w);
-	cmd->body.height = cpu_to_le32(h);
-	vmw_fifo_commit(dev_priv, sizeof(*cmd));
+	for (i = 0; i < num_clips; i++) {
+		cmd[i].header = cpu_to_le32(SVGA_CMD_UPDATE);
+		cmd[i].body.x = cpu_to_le32(clips[i].x1);
+		cmd[i].body.y = cpu_to_le32(clips[i].y1);
+		cmd[i].body.width = cpu_to_le32(clips[i].x2 - clips[i].x1);
+		cmd[i].body.height = cpu_to_le32(clips[i].y2 - clips[i].y1);
+	}
+
+	vmw_fifo_commit(dev_priv, sizeof(*cmd) * num_clips);
 
 	return 0;
 }
