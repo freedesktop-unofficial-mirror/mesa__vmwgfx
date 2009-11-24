@@ -313,19 +313,96 @@ static int vmw_ldu_connector_fill_modes(struct drm_connector *connector,
 {
 	struct drm_device *dev = connector->dev;
 	struct drm_display_mode *mode = NULL;
+	int i;
+	static struct drm_display_mode builtin[] = {
+		/* 640x480@60Hz */
+		{ DRM_MODE("640x480", DRM_MODE_TYPE_DRIVER, 25175, 640, 656,
+			   752, 800, 0, 480, 489, 492, 525, 0,
+			   DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_NVSYNC) },
+		/* 800x600@60Hz */
+		{ DRM_MODE("800x600",
+			   DRM_MODE_TYPE_DRIVER | DRM_MODE_TYPE_PREFERRED,
+			   40000, 800, 840, 968, 1056, 0, 600, 601, 605, 628,
+			   0, DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_PVSYNC) },
+		/* 1024x768@60Hz */
+		{ DRM_MODE("1024x768", DRM_MODE_TYPE_DRIVER, 65000, 1024, 1048,
+			   1184, 1344, 0, 768, 771, 777, 806, 0,
+			   DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_NVSYNC) },
+		/* 1152x864@75Hz */
+		{ DRM_MODE("1152x864", DRM_MODE_TYPE_DRIVER, 108000, 1152, 1216,
+			   1344, 1600, 0, 864, 865, 868, 900, 0,
+			   DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_PVSYNC) },
+		/* 1280x768@60Hz */
+		{ DRM_MODE("1280x768", DRM_MODE_TYPE_DRIVER, 79500, 1280, 1344,
+			   1472, 1664, 0, 768, 771, 778, 798, 0,
+			   DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_PVSYNC) },
+		/* 1280x800@60Hz */
+		{ DRM_MODE("1280x800", DRM_MODE_TYPE_DRIVER, 83500, 1280, 1352,
+			   1480, 1680, 0, 800, 803, 809, 831, 0,
+			   DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_NVSYNC) },
+		/* 1280x960@60Hz */
+		{ DRM_MODE("1280x960", DRM_MODE_TYPE_DRIVER, 108000, 1280, 1376,
+			   1488, 1800, 0, 960, 961, 964, 1000, 0,
+			   DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_PVSYNC) },
+		/* 1280x1024@60Hz */
+		{ DRM_MODE("1280x1024", DRM_MODE_TYPE_DRIVER, 108000, 1280, 1328,
+			   1440, 1688, 0, 1024, 1025, 1028, 1066, 0,
+			   DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_PVSYNC) },
+		/* 1360x768@60Hz */
+		{ DRM_MODE("1360x768", DRM_MODE_TYPE_DRIVER, 85500, 1360, 1424,
+			   1536, 1792, 0, 768, 771, 777, 795, 0,
+			   DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_PVSYNC) },
+		/* 1440x1050@60Hz */
+		{ DRM_MODE("1400x1050", DRM_MODE_TYPE_DRIVER, 121750, 1400, 1488,
+			   1632, 1864, 0, 1050, 1053, 1057, 1089, 0,
+			   DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_PVSYNC) },
+		/* 1440x900@60Hz */
+		{ DRM_MODE("1440x900", DRM_MODE_TYPE_DRIVER, 106500, 1440, 1520,
+			   1672, 1904, 0, 900, 903, 909, 934, 0,
+			   DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_PVSYNC) },
+		/* 1600x1200@60Hz */
+		{ DRM_MODE("1600x1200", DRM_MODE_TYPE_DRIVER, 162000, 1600, 1664,
+			   1856, 2160, 0, 1200, 1201, 1204, 1250, 0,
+			   DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_PVSYNC) },
+		/* 1680x1050@60Hz */
+		{ DRM_MODE("1680x1050", DRM_MODE_TYPE_DRIVER, 146250, 1680, 1784,
+			   1960, 2240, 0, 1050, 1053, 1059, 1089, 0,
+			   DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_PVSYNC) },
+		/* 1792x1344@60Hz */
+		{ DRM_MODE("1792x1344", DRM_MODE_TYPE_DRIVER, 204750, 1792, 1920,
+			   2120, 2448, 0, 1344, 1345, 1348, 1394, 0,
+			   DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_PVSYNC) },
+		/* 1853x1392@60Hz */
+		{ DRM_MODE("1856x1392", DRM_MODE_TYPE_DRIVER, 218250, 1856, 1952,
+			   2176, 2528, 0, 1392, 1393, 1396, 1439, 0,
+			   DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_PVSYNC) },
+		/* 1920x1200@60Hz */
+		{ DRM_MODE("1920x1200", DRM_MODE_TYPE_DRIVER, 193250, 1920, 2056,
+			   2256, 2592, 0, 1200, 1203, 1209, 1245, 0,
+			   DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_PVSYNC) },
+		/* 1920x1440@60Hz */
+		{ DRM_MODE("1920x1440", DRM_MODE_TYPE_DRIVER, 234000, 1920, 2048,
+			   2256, 2600, 0, 1440, 1441, 1444, 1500, 0,
+			   DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_PVSYNC) },
+#if 0
+		/* 2560x1600@60Hz */
+		{ DRM_MODE("2560x1600", DRM_MODE_TYPE_DRIVER, 348500, 2560, 2752,
+			   3032, 3504, 0, 1600, 1603, 1609, 1658, 0,
+			   DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_PVSYNC) },
+#endif
+		/* Terminate */
+		{ DRM_MODE("", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) },
+	};
 
-	/* stolen from drm_edid.c */
-	static struct drm_display_mode hack = 
-		{ DRM_MODE("800x600", DRM_MODE_TYPE_DRIVER, 40000, 800, 840,
-			   968, 1056, 0, 600, 601, 605, 628, 0,
-			   DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_PVSYNC) };
 
-	mode = drm_mode_duplicate(dev, &hack);
-	if (!mode)
-		return 0;
-	mode->vrefresh = drm_mode_vrefresh(mode);
+	for (i = 0; builtin[i].type != 0; i++) {
+		mode = drm_mode_duplicate(dev, &builtin[i]);
+		if (!mode)
+			return 0;
+		mode->vrefresh = drm_mode_vrefresh(mode);
 
-	drm_mode_probed_add(connector, mode);
+		drm_mode_probed_add(connector, mode);
+	}
 
 	drm_mode_connector_list_update(connector);
 
