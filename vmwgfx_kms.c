@@ -110,12 +110,13 @@ int vmw_du_crtc_cursor_set(struct drm_crtc *crtc, struct drm_file *file_priv,
 				DRM_ERROR("surface not suitable for cursor\n");
 				return -EINVAL;
 			}
-		}
-		ret = vmw_user_dmabuf_lookup(tfile,
-					     handle, &dmabuf);
-		if (ret) {
-			DRM_ERROR("failed to find surface or dmabuf: %i\n", ret);
-			return -EINVAL;
+		} else {
+			ret = vmw_user_dmabuf_lookup(tfile,
+						     handle, &dmabuf);
+			if (ret) {
+				DRM_ERROR("failed to find surface or dmabuf: %i\n", ret);
+				return -EINVAL;
+			}
 		}
 	}
 
