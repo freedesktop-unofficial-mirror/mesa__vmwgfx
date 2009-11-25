@@ -137,7 +137,8 @@ struct vmw_sw_context{
 	uint32_t cur_val_buf;
 };
 
-struct vmw_legacy_display_system;
+struct vmw_legacy_display;
+struct vmw_overlay;
 
 struct vmw_master {
 	struct ttm_lock lock;
@@ -185,6 +186,7 @@ struct vmw_private {
 
 	void *fb_info;
 	struct vmw_legacy_display *ldu_priv;
+	struct vmw_overlay *overlay_priv;
 
 	/*
 	 * Context and surface management.
@@ -447,6 +449,15 @@ void vmw_kms_cursor_snoop(struct vmw_surface *srf,
 			  struct ttm_object_file *tfile,
 			  struct ttm_buffer_object *bo,
 			  SVGA3dCmdHeader *header);
+
+/**
+ * Overlay control - vmwgfx_overlay.c
+ */
+
+int vmw_overlay_init(struct vmw_private *dev_priv);
+int vmw_overlay_close(struct vmw_private *dev_priv);
+int vmw_overlay_ioctl(struct drm_device *dev, void *data,
+		      struct drm_file *file_priv);
 
 /**
  * Inline helper functions

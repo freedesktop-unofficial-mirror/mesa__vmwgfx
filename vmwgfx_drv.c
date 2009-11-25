@@ -80,6 +80,9 @@
 #define DRM_IOCTL_VMW_FENCE_WAIT				\
 	DRM_IOWR(DRM_COMMAND_BASE + DRM_VMW_FENCE_WAIT,		\
 		 struct drm_vmw_fence_wait_arg)
+#define DRM_IOCTL_VMW_OVERLAY					\
+	DRM_IOW(DRM_COMMAND_BASE + DRM_VMW_OVERLAY,		\
+		 struct drm_vmw_overlay_arg)
 
 /**
  * The core DRM version of this macro doesn't account for
@@ -115,6 +118,8 @@ static struct drm_ioctl_desc vmw_ioctls[] = {
 	VMW_IOCTL_DEF(DRM_IOCTL_VMW_FIFO_DEBUG, vmw_fifo_debug_ioctl,
 		      0),
 	VMW_IOCTL_DEF(DRM_IOCTL_VMW_FENCE_WAIT, vmw_fence_wait_ioctl,
+		      0),
+	VMW_IOCTL_DEF(DRM_IOCTL_VMW_OVERLAY, vmw_overlay_ioctl,
 		      0)
 };
 
@@ -320,11 +325,13 @@ static int vmw_driver_load(struct drm_device *dev, unsigned long chipset)
 			goto out_no_device;
 		}
 		vmw_kms_init(dev_priv);
+		vmw_overlay_init(dev_priv);
 	} else {
 		ret = vmw_request_device(dev_priv);
 		if (unlikely(ret != 0))
 			goto out_no_device;
 		vmw_kms_init(dev_priv);
+		vmw_overlay_init(dev_priv);
 		vmw_fb_init(dev_priv);
 	}
 
@@ -363,10 +370,12 @@ static int vmw_driver_unload(struct drm_device *dev)
 	if (!dev_priv->stealth) {
 		vmw_fb_close(dev_priv);
 		vmw_kms_close(dev_priv);
+		vmw_overlay_close(dev_priv);
 		vmw_release_device(dev_priv);
 		pci_release_regions(dev->pdev);
 	} else {
 		vmw_kms_close(dev_priv);
+		vmw_overlay_close(dev_priv);
 		pci_release_region(dev->pdev, 2);
 	}
 	drm_irq_uninstall(dev_priv->dev);
