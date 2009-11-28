@@ -220,10 +220,13 @@ static int vmw_driver_load(struct drm_device *dev, unsigned long chipset)
 	mutex_lock(&dev_priv->hw_mutex);
 	dev_priv->capabilities = vmw_read(dev_priv, SVGA_REG_CAPABILITIES);
 
-	dev_priv->max_gmr_descriptors =
-		vmw_read(dev_priv, SVGA_REG_GMR_MAX_DESCRIPTOR_LENGTH);
-	dev_priv->max_gmr_ids =
-		vmw_read(dev_priv, SVGA_REG_GMR_MAX_IDS);
+	if (dev_priv->capabilities & SVGA_CAP_GMR) {
+		dev_priv->max_gmr_descriptors =
+			vmw_read(dev_priv,
+				 SVGA_REG_GMR_MAX_DESCRIPTOR_LENGTH);
+		dev_priv->max_gmr_ids =
+			vmw_read(dev_priv, SVGA_REG_GMR_MAX_IDS);
+	}
 
 	dev_priv->vram_size = vmw_read(dev_priv, SVGA_REG_VRAM_SIZE);
 	dev_priv->mmio_size = vmw_read(dev_priv, SVGA_REG_MEM_SIZE);
@@ -234,10 +237,12 @@ static int vmw_driver_load(struct drm_device *dev, unsigned long chipset)
 
 	vmw_print_capabilities(dev_priv->capabilities);
 
-	DRM_INFO("Max GMR ids is %u\n",
-		 (unsigned)dev_priv->max_gmr_ids);
-	DRM_INFO("Max GMR descriptors is %u\n",
-		 (unsigned)dev_priv->max_gmr_descriptors);
+	if (dev_priv->capabilities & SVGA_CAP_GMR) {
+		DRM_INFO("Max GMR ids is %u\n",
+			 (unsigned)dev_priv->max_gmr_ids);
+		DRM_INFO("Max GMR descriptors is %u\n",
+			 (unsigned)dev_priv->max_gmr_descriptors);
+	}
 	DRM_INFO("VRAM at 0x%08x size is %u kiB\n",
 		 dev_priv->vram_start, dev_priv->vram_size / 1024);
 	DRM_INFO("MMIO at 0x%08x size is %u kiB\n",
@@ -302,10 +307,12 @@ static int vmw_driver_load(struct drm_device *dev, unsigned long chipset)
 	if (!dev->devname)
 		dev->devname = vmw_devname;
 
-	ret = drm_irq_install(dev);
-	if (unlikely(ret != 0)) {
-		DRM_ERROR("Failed installing irq: %d\n", ret);
-		goto out_no_irq;
+	if (dev_priv->capabilities & SVGA_CAP_IRQMASK) {
+		ret = drm_irq_install(dev);
+		if (unlikely(ret != 0)) {
+			DRM_ERROR("Failed installing irq: %d\n", ret);
+			goto out_no_irq;
+		}
 	}
 
 	ret = pci_request_regions(dev->pdev, "vmwgfx probe");
@@ -336,7 +343,8 @@ static int vmw_driver_load(struct drm_device *dev, unsigned long chipset)
 	return 0;
 
 out_no_device:
-	drm_irq_uninstall(dev_priv->dev);
+	if (dev_priv->capabilities & SVGA_CAP_IRQMASK)
+		drm_irq_uninstall(dev_priv->dev);
 	if (dev->devname == vmw_devname)
 		dev->devname = NULL;
 out_no_irq:
@@ -376,7 +384,8 @@ static int vmw_driver_unload(struct drm_device *dev)
 		vmw_overlay_close(dev_priv);
 		pci_release_region(dev->pdev, 2);
 	}
-	drm_irq_uninstall(dev_priv->dev);
+	if (dev_priv->capabilities & SVGA_CAP_IRQMASK)
+		drm_irq_uninstall(dev_priv->dev);
 	if (dev->devname == vmw_devname)
 		dev->devname = NULL;
 	ttm_object_device_release(&dev_priv->tdev);
