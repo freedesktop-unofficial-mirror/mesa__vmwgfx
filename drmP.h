@@ -93,6 +93,9 @@ struct drm_device;
 
 #undef EXPORT_SYMBOL
 #define EXPORT_SYMBOL(_dummy)
+#undef EXPORT_SYMBOL_GPL
+#define EXPORT_SYMBOL_GPL(_dummy)
+
 #define VMWGFX_NUM_MINORS 16
 #define VMWGFX_DEVICE_NAME "vmwgfx"
 
