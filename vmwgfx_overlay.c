@@ -328,7 +328,7 @@ int vmw_overlay_close(struct vmw_private *dev_priv)
 	for (i = 0; i < VMW_MAX_NUM_STREAMS; i++) {
 		if (overlay->stream[i].buf) {
 			forgotten_buffer = true;
-			vmw_dmabuf_unreference(&overlay->stream[i].buf);
+			vmw_overlay_stop(dev_priv, i);
 		}
 	}
 
