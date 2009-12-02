@@ -598,6 +598,8 @@ static int vmw_framebuffer_dmabuf_pin(struct vmw_framebuffer *vfb)
 	struct vmw_framebuffer_dmabuf *vfbd= vmw_framebuffer_to_vfbd(&vfb->base);
 	int ret;
 
+	vmw_overlay_pause_all(dev_priv);
+
 	ret = vmw_dmabuf_to_start_of_vram(dev_priv, vfbd->buffer);
 
 	if (dev_priv->capabilities & SVGA_CAP_MULTIMON) {
@@ -620,6 +622,8 @@ static int vmw_framebuffer_dmabuf_pin(struct vmw_framebuffer *vfb)
 		vmw_write(dev_priv, SVGA_REG_BLUE_MASK, 0x000000ff);
 	} else
 		WARN_ON(true);
+
+	vmw_overlay_resume_all(dev_priv);
 
 	return 0;
 }

@@ -40,6 +40,7 @@ struct vmw_stream
 {
 	struct vmw_dma_buffer *buf;
 	bool paused;
+	struct drm_vmw_overlay_arg saved;
 };
 
 /**
@@ -51,7 +52,6 @@ struct vmw_overlay
 	 * Each stream is a single overlay. In Xv these are called ports.
 	 */
 	struct vmw_stream stream[VMW_MAX_NUM_STREAMS];
-
 };
 
 static inline struct vmw_overlay * vmw_overlay(struct drm_device *dev)
@@ -194,8 +194,18 @@ static int vmw_overlay_send_stop(struct vmw_private *dev_priv,
 	return 0;
 }
 
+/**
+ * Stop or pause a stream.
+ *
+ * If the stream is paused the no evict flag is removed from the buffer
+ * but left in vram. This allows for instance mode_set to evict it
+ * should it need to.
+ *
+ * @stream_id which stream to stop/pause.
+ * @pause true to pause, false to stop completely.
+ */
 static int vmw_overlay_stop(struct vmw_private *dev_priv,
-			    uint32_t stream_id)
+			    uint32_t stream_id, bool pause)
 {
 	struct vmw_overlay *overlay = dev_priv->overlay_priv;
 	struct vmw_stream *stream = &overlay->stream[stream_id];
@@ -215,8 +225,12 @@ static int vmw_overlay_stop(struct vmw_private *dev_priv,
 		WARN_ON(ret != 0);
 	}
 
-	vmw_dmabuf_unreference(&stream->buf);
-	stream->paused = false;
+	if (!pause) {
+		vmw_dmabuf_unreference(&stream->buf);
+		stream->paused = false;
+	} else {
+		stream->paused = true;
+	}
 
 	return 0;
 }
@@ -235,15 +249,16 @@ static int vmw_overlay_update_stream(struct vmw_private *dev_priv,
 	DRM_DEBUG("   %s: old %p, new %p, %spaused\n", __func__,
 		  stream->buf, buf, stream->paused ? "" : "not ");
 
-	/* If the buffers match and not paused then just send the put. */
-	if (stream->buf == buf && !stream->paused)
-		return vmw_overlay_send_put(dev_priv, buf, arg);
-
-	/* If there is a buffer call stop to completely stop the stream */
-	if (stream->buf) {
-		ret = vmw_overlay_stop(dev_priv, arg->stream_id);
+	if (stream->buf != buf) {
+		ret = vmw_overlay_stop(dev_priv, arg->stream_id, false);
 		if (ret)
 			return ret;
+	} else if (!stream->paused) {
+		/* If the buffers match and not paused then just send the put. */
+		ret = vmw_overlay_send_put(dev_priv, buf, arg);
+		if (ret == 0)
+			stream->saved = *arg;
+		return ret;
 	}
 
 	ret = vmw_dmabuf_pin_in_vram(dev_priv, buf, true);
@@ -253,11 +268,47 @@ static int vmw_overlay_update_stream(struct vmw_private *dev_priv,
 	ret = vmw_overlay_send_put(dev_priv, buf, arg);
 	if (ret) {
 		WARN_ON(vmw_dmabuf_pin_in_vram(dev_priv, buf, false) != 0);
-	} else {
-		stream->buf = vmw_dmabuf_reference(buf);
+		return ret;
 	}
 
-	return ret;
+	if (stream->buf != buf)
+		stream->buf = vmw_dmabuf_reference(buf);
+	stream->saved = *arg;
+
+	return 0;
+}
+
+int vmw_overlay_resume_all(struct vmw_private *dev_priv)
+{
+	struct vmw_overlay *overlay = dev_priv->overlay_priv;
+	int i, ret;
+
+	for (i = 0; i < VMW_MAX_NUM_STREAMS; i++) {
+		struct vmw_stream *stream = &overlay->stream[i];
+		if (!stream->paused)
+			continue;
+
+		ret = vmw_overlay_update_stream(dev_priv, stream->buf,
+						&stream->saved);
+		if (ret != 0)
+			DRM_INFO("%s: *warning* failed to resume stream %u\n", __func__, i);
+	}
+
+	return 0;
+}
+
+int vmw_overlay_pause_all(struct vmw_private *dev_priv)
+{
+	struct vmw_overlay *overlay = dev_priv->overlay_priv;
+	int i, ret;
+
+	for (i = 0; i < VMW_MAX_NUM_STREAMS; i++) {
+		if (overlay->stream[i].paused)
+			DRM_INFO("%s: *warning* stream already paused\n", __func__);
+		ret = vmw_overlay_stop(dev_priv, i, true);
+		WARN_ON(ret != 0);
+	}
+	return 0;
 }
 
 int vmw_overlay_ioctl(struct drm_device *dev, void *data,
@@ -274,7 +325,7 @@ int vmw_overlay_ioctl(struct drm_device *dev, void *data,
 		return -EINVAL;
 
 	if (!arg->enabled)
-		return vmw_overlay_stop(dev_priv, arg->stream_id);
+		return vmw_overlay_stop(dev_priv, arg->stream_id, false);
 
 	ret = vmw_user_dmabuf_lookup(tfile, arg->handle, &buf);
 	if (ret)
@@ -324,7 +375,7 @@ int vmw_overlay_close(struct vmw_private *dev_priv)
 	for (i = 0; i < VMW_MAX_NUM_STREAMS; i++) {
 		if (overlay->stream[i].buf) {
 			forgotten_buffer = true;
-			vmw_overlay_stop(dev_priv, i);
+			vmw_overlay_stop(dev_priv, i, false);
 		}
 	}
 
