@@ -201,8 +201,6 @@ static int vmw_overlay_stop(struct vmw_private *dev_priv,
 	struct vmw_stream *stream = &overlay->stream[stream_id];
 	int ret;
 
-	DRM_INFO("      %s: enter\n", __func__);
-
 	/* no buffer attached the stream is completely stopped */
 	if (!stream->buf)
 		return 0;
@@ -271,8 +269,6 @@ int vmw_overlay_ioctl(struct drm_device *dev, void *data,
 	    (struct drm_vmw_overlay_arg *)data;
 	struct vmw_dma_buffer *buf;
 	int ret;
-
-	DRM_INFO("%s: enter\n", __func__);
 
 	if (arg->stream_id > VMW_MAX_NUM_STREAMS)
 		return -EINVAL;
