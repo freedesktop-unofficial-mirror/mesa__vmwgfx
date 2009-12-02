@@ -78,6 +78,11 @@
 #define DRM_MODE_DITHERING_OFF	0
 #define DRM_MODE_DITHERING_ON	1
 
+/* Dirty info options */
+#define DRM_MODE_DIRTY_OFF      0
+#define DRM_MODE_DIRTY_ON       1
+#define DRM_MODE_DIRTY_ANNOTATE 2
+
 struct drm_mode_modeinfo {
 	__u32 clock;
 	__u16 hdisplay, hsync_start, hsync_end, htotal, hskew;

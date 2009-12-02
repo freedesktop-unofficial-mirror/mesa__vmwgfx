@@ -125,6 +125,16 @@ static struct drm_prop_enum_list drm_tv_subconnector_enum_list[] =
 DRM_ENUM_NAME_FN(drm_get_tv_subconnector_name,
 		 drm_tv_subconnector_enum_list)
 
+static struct drm_prop_enum_list drm_dirty_info_enum_list[] =
+{
+	{ DRM_MODE_DIRTY_OFF,      "Off"      },
+	{ DRM_MODE_DIRTY_ON,       "On"       },
+	{ DRM_MODE_DIRTY_ANNOTATE, "Annotate" },
+};
+
+DRM_ENUM_NAME_FN(drm_get_dirty_info_name,
+		 drm_dirty_info_enum_list)
+
 struct drm_conn_prop_enum_list {
 	int type;
 	char *name;
@@ -800,6 +810,36 @@ int drm_mode_create_dithering_property(struct drm_device *dev)
 	return 0;
 }
 EXPORT_SYMBOL(drm_mode_create_dithering_property);
+
+/**
+ * drm_mode_create_dirty_property - create dirty property
+ * @dev: DRM device
+ *
+ * Called by a driver the first time it's needed, must be attached to desired
+ * connectors.
+ */
+int drm_mode_create_dirty_info_property(struct drm_device *dev)
+{
+	struct drm_property *dirty_info;
+	int i;
+
+	if (dev->mode_config.dirty_info_property)
+		return 0;
+
+	dirty_info =
+		drm_property_create(dev, DRM_MODE_PROP_ENUM |
+				    DRM_MODE_PROP_IMMUTABLE,
+				    "dirty",
+				    ARRAY_SIZE(drm_dirty_info_enum_list));
+	for (i = 0; i < ARRAY_SIZE(drm_dirty_info_enum_list); i++)
+		drm_property_add_enum(dirty_info, i,
+				      drm_dirty_info_enum_list[i].type,
+				      drm_dirty_info_enum_list[i].name);
+	dev->mode_config.dirty_info_property = dirty_info;
+
+	return 0;
+}
+EXPORT_SYMBOL(drm_mode_create_dirty_info_property);
 
 /**
  * drm_mode_config_init - initialize DRM mode_configuration structure

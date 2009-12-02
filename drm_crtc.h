@@ -598,6 +598,7 @@ struct drm_mode_config {
 	/* Optional properties */
 	struct drm_property *scaling_mode_property;
 	struct drm_property *dithering_mode_property;
+	struct drm_property *dirty_info_property;
 };
 
 #define obj_to_crtc(x) container_of(x, struct drm_crtc, base)
@@ -705,6 +706,7 @@ extern int drm_mode_create_tv_properties(struct drm_device *dev, int num_formats
 				     char *formats[]);
 extern int drm_mode_create_scaling_mode_property(struct drm_device *dev);
 extern int drm_mode_create_dithering_property(struct drm_device *dev);
+extern int drm_mode_create_dirty_info_property(struct drm_device *dev);
 extern char *drm_get_encoder_name(struct drm_encoder *encoder);
 
 extern int drm_mode_connector_attach_encoder(struct drm_connector *connector,
