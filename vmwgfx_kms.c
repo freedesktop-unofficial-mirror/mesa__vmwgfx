@@ -392,6 +392,7 @@ out_unlock:
 
 
 int vmw_framebuffer_surface_dirty(struct drm_framebuffer *framebuffer,
+				  unsigned flags, unsigned color,
 				  struct drm_clip_rect *clips, unsigned num_clips)
 {
 	struct vmw_private *dev_priv = vmw_priv(framebuffer->dev);
@@ -399,7 +400,7 @@ int vmw_framebuffer_surface_dirty(struct drm_framebuffer *framebuffer,
 	struct vmw_surface *surf = vfbs->surface;
 	struct drm_clip_rect norect;
 	SVGA3dCopyRect *cr;
-	int i;
+	int i, increment = 1;
 
 	struct {
 		SVGA3dCmdHeader header;
@@ -431,6 +432,9 @@ int vmw_framebuffer_surface_dirty(struct drm_framebuffer *framebuffer,
 		norect.x1 = norect.y1 = 0;
 		norect.x2 = framebuffer->width;
 		norect.y2 = framebuffer->height;
+	} else if (flags & DRM_MODE_FB_DIRTY_ANNOTATE_COPY) {
+		num_clips /= 2;
+		increment = 2;
 	}
 
 	cmd = vmw_fifo_reserve(dev_priv, sizeof(*cmd) + (num_clips - 1) * sizeof(cmd->cr));
@@ -445,7 +449,7 @@ int vmw_framebuffer_surface_dirty(struct drm_framebuffer *framebuffer,
 	cmd->header.size = cpu_to_le32(sizeof(cmd->body) + num_clips * sizeof(cmd->cr));
 	cmd->body.sid = cpu_to_le32(surf->res.id);
 
-	for (i = 0, cr = &cmd->cr; i < num_clips; i++, cr++, clips++) {
+	for (i = 0, cr = &cmd->cr; i < num_clips; i++, cr++, clips += increment) {
 		cr->x = cpu_to_le16(clips->x1);
 		cr->y = cpu_to_le16(clips->y1);
 		cr->srcx = cr->x;
@@ -539,20 +543,16 @@ void vmw_framebuffer_dmabuf_destroy(struct drm_framebuffer *framebuffer)
 }
 
 int vmw_framebuffer_dmabuf_dirty(struct drm_framebuffer *framebuffer,
+				 unsigned flags, unsigned color,
 				 struct drm_clip_rect *clips, unsigned num_clips)
 {
 	struct vmw_private *dev_priv = vmw_priv(framebuffer->dev);
-	struct vmw_framebuffer_dmabuf *vfbd = vmw_framebuffer_to_vfbd(framebuffer);
-	struct vmw_dma_buffer *buf = vfbd->buffer;
 	struct drm_clip_rect norect;
 	struct {
 		uint32_t header;
 		SVGAFifoCmdUpdate body;
 	} *cmd;
-	int i;
-
-	/* XXX validate buffer */
-	(void)buf;
+	int i, increment = 1;
 
 	if (!num_clips ||
             !(dev_priv->fifo.capabilities &
@@ -562,6 +562,9 @@ int vmw_framebuffer_dmabuf_dirty(struct drm_framebuffer *framebuffer,
 		norect.x1 = norect.y1 = 0;
 		norect.x2 = framebuffer->width;
 		norect.y2 = framebuffer->height;
+	} else if (flags & DRM_MODE_FB_DIRTY_ANNOTATE_COPY) {
+		num_clips /= 2;
+		increment = 2;
 	}
 
 	cmd = vmw_fifo_reserve(dev_priv, sizeof(*cmd) * num_clips);
@@ -570,7 +573,7 @@ int vmw_framebuffer_dmabuf_dirty(struct drm_framebuffer *framebuffer,
 		return -ENOMEM;
 	}
 
-	for (i = 0; i < num_clips; i++) {
+	for (i = 0; i < num_clips; i++, clips += increment) {
 		cmd[i].header = cpu_to_le32(SVGA_CMD_UPDATE);
 		cmd[i].body.x = cpu_to_le32(clips[i].x1);
 		cmd[i].body.y = cpu_to_le32(clips[i].y1);
