@@ -239,11 +239,24 @@ struct drm_display_info {
 
 struct drm_framebuffer_funcs {
 	void (*destroy)(struct drm_framebuffer *framebuffer);
-	int (*dirty)(struct drm_framebuffer *framebuffer,
-		     struct drm_clip_rect *clips, unsigned num_clips);
 	int (*create_handle)(struct drm_framebuffer *fb,
 			     struct drm_file *file_priv,
 			     unsigned int *handle);
+	/**
+	 * Optinal callback for the dirty fb ioctl.
+	 *
+	 * Userspace can notify the driver via this callback
+	 * that a area of the framebuffer has changed and should
+	 * be flushed to the display hardware.
+	 *
+	 * See documentation in drm_mode.h for the struct
+	 * drm_mode_fb_dirty_cmd for more information as all
+	 * the semantics and arguments have a one to one mapping
+	 * on this function.
+	 */
+	int (*dirty)(struct drm_framebuffer *framebuffer, unsigned flags,
+		     unsigned color, struct drm_clip_rect *clips,
+		     unsigned num_clips);
 };
 
 struct drm_framebuffer {
@@ -770,5 +783,4 @@ extern struct drm_display_mode *drm_gtf_mode(struct drm_device *dev,
 				bool interlaced, int margins);
 extern int drm_add_modes_noedid(struct drm_connector *connector,
 				int hdisplay, int vdisplay);
-
 #endif /* __DRM_CRTC_H__ */
