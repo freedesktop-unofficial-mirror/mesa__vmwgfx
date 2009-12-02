@@ -468,6 +468,10 @@ static int vmw_ldu_init(struct vmw_private *dev_priv, unsigned unit)
 
 	drm_crtc_init(dev, crtc, &vmw_legacy_crtc_funcs);
 
+	drm_connector_attach_property(connector,
+				      dev->mode_config.dirty_info_property,
+				      1);
+
 	return 0;
 }
 
@@ -486,6 +490,8 @@ int vmw_kms_init_legacy_display_system(struct vmw_private *dev_priv)
 	INIT_LIST_HEAD(&dev_priv->ldu_priv->active);
 	dev_priv->ldu_priv->num_active = 0;
 	dev_priv->ldu_priv->fb = NULL;
+
+	drm_mode_create_dirty_info_property(dev_priv->dev);
 
 	vmw_ldu_init(dev_priv, 0);
 	vmw_ldu_init(dev_priv, 1);
