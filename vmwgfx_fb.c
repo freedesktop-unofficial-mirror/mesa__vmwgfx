@@ -425,8 +425,17 @@ int vmw_fb_init(struct vmw_private *vmw_priv)
 
 	fb_bbp = 32;
 	fb_depth = 24;
-	fb_width = min(vmw_priv->fb_max_width, (unsigned)2048);
-	fb_height = min(vmw_priv->fb_max_height, (unsigned)2048);
+
+	if (vmw_priv->capabilities & SVGA_CAP_MULTIMON) {
+		fb_width = min(vmw_priv->fb_max_width, (unsigned)2048);
+		fb_height = min(vmw_priv->fb_max_height, (unsigned)2048);
+	} else {
+		fb_width = min(vmw_priv->fb_max_width, initial_width);
+		fb_height = min(vmw_priv->fb_max_height, initial_height);
+	}
+
+	initial_width = min(fb_width, initial_width);
+	initial_height = min(fb_height, initial_height);
 
 	vmw_write(vmw_priv, SVGA_REG_WIDTH, fb_width);
 	vmw_write(vmw_priv, SVGA_REG_HEIGHT, fb_height);
