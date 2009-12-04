@@ -84,7 +84,7 @@
 	DRM_IOW(DRM_COMMAND_BASE + DRM_VMW_OVERLAY,		\
 		 struct drm_vmw_overlay_arg)
 #define DRM_IOCTL_VMW_CURSOR_BYPASS				\
-	DRM_IOWR(DRM_COMMAND_BASE + DRM_VMW_CURSOR_BYPASS,	\
+	DRM_IOW(DRM_COMMAND_BASE + DRM_VMW_CURSOR_BYPASS,	\
 		 struct drm_vmw_cursor_bypass_arg)
 
 /**
