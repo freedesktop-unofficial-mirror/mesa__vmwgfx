@@ -83,6 +83,9 @@
 #define DRM_IOCTL_VMW_OVERLAY					\
 	DRM_IOW(DRM_COMMAND_BASE + DRM_VMW_OVERLAY,		\
 		 struct drm_vmw_overlay_arg)
+#define DRM_IOCTL_VMW_CURSOR_BYPASS				\
+	DRM_IOWR(DRM_COMMAND_BASE + DRM_VMW_CURSOR_BYPASS,	\
+		 struct drm_vmw_cursor_bypass_arg)
 
 /**
  * The core DRM version of this macro doesn't account for
@@ -120,7 +123,9 @@ static struct drm_ioctl_desc vmw_ioctls[] = {
 	VMW_IOCTL_DEF(DRM_IOCTL_VMW_FENCE_WAIT, vmw_fence_wait_ioctl,
 		      0),
 	VMW_IOCTL_DEF(DRM_IOCTL_VMW_OVERLAY, vmw_overlay_ioctl,
-		      0)
+		      0),
+	VMW_IOCTL_DEF(DRM_IOCTL_VMW_CURSOR_BYPASS,
+		      vmw_kms_cursor_bypass_ioctl, 0)
 };
 
 static struct pci_device_id vmw_pci_id_list[] =

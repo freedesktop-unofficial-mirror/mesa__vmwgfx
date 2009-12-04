@@ -444,6 +444,8 @@ int vmw_kms_init(struct vmw_private *dev_priv);
 int vmw_kms_close(struct vmw_private *dev_priv);
 int vmw_kms_save_vga(struct vmw_private *vmw_priv);
 int vmw_kms_restore_vga(struct vmw_private *vmw_priv);
+int vmw_kms_cursor_bypass_ioctl(struct drm_device *dev, void *data,
+				struct drm_file *file_priv);
 void vmw_kms_cursor_post_execbuf(struct vmw_private *dev_priv);
 void vmw_kms_cursor_snoop(struct vmw_surface *srf,
 			  struct ttm_object_file *tfile,

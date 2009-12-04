@@ -47,7 +47,8 @@ void vmw_display_unit_cleanup(struct vmw_display_unit *du)
  */
 
 int vmw_cursor_update_image(struct vmw_private *dev_priv,
-			    u32 *image, u32 width, u32 height)
+			    u32 *image, u32 width, u32 height,
+			    u32 hotspotX, u32 hotspotY)
 {
 	struct {
 		u32 cmd;
@@ -75,8 +76,8 @@ int vmw_cursor_update_image(struct vmw_private *dev_priv,
 	cmd->cursor.id = cpu_to_le32(0);
 	cmd->cursor.width = cpu_to_le32(width);
 	cmd->cursor.height = cpu_to_le32(height);
-	cmd->cursor.hotspotX = cpu_to_le32(1);//???
-	cmd->cursor.hotspotY = cpu_to_le32(1);//???
+	cmd->cursor.hotspotX = cpu_to_le32(hotspotX);
+	cmd->cursor.hotspotY = cpu_to_le32(hotspotY);
 
 	vmw_fifo_commit(dev_priv, cmd_size);
 
@@ -140,7 +141,8 @@ int vmw_du_crtc_cursor_set(struct drm_crtc *crtc, struct drm_file *file_priv,
 
 		du->cursor_surface->snooper.crtc = crtc;
 		du->cursor_age = du->cursor_surface->snooper.age;
-		vmw_cursor_update_image(dev_priv, surface->snooper.image, 64, 64);
+		vmw_cursor_update_image(dev_priv, surface->snooper.image,
+					64, 64, du->hotspot_x, du->hotspot_y);
 	} else if (dmabuf) {
 		struct ttm_bo_kmap_obj map;
 		unsigned long kmap_offset;
@@ -166,7 +168,8 @@ int vmw_du_crtc_cursor_set(struct drm_crtc *crtc, struct drm_file *file_priv,
 		}
 
 		virtual = ttm_kmap_obj_virtual(&map, &dummy);
-		vmw_cursor_update_image(dev_priv, virtual, 64, 64);
+		vmw_cursor_update_image(dev_priv, virtual, 64, 64,
+					du->hotspot_x, du->hotspot_y);
 
 		ttm_bo_kunmap(&map);
 		err_unreserve:
@@ -298,7 +301,7 @@ void vmw_kms_cursor_post_execbuf(struct vmw_private *dev_priv)
 		du->cursor_age = du->cursor_surface->snooper.age;
 		vmw_cursor_update_image(dev_priv,
 					du->cursor_surface->snooper.image,
-					64, 64);
+					64, 64, du->hotspot_x, du->hotspot_y);
 	}
 
 	mutex_unlock(&dev->mode_config.mutex);
@@ -780,6 +783,47 @@ int vmw_kms_close(struct vmw_private *dev_priv)
 	drm_mode_config_cleanup(dev_priv->dev);
 	vmw_kms_close_legacy_display_system(dev_priv);
 	return 0;
+}
+
+int vmw_kms_cursor_bypass_ioctl(struct drm_device *dev, void *data,
+				struct drm_file *file_priv)
+{
+	struct drm_vmw_cursor_bypass_arg *arg = data;
+	struct vmw_display_unit *du;
+	struct drm_mode_object *obj;
+	struct drm_crtc *crtc;
+	int ret = 0;
+
+
+	mutex_lock(&dev->mode_config.mutex);
+	if (arg->flags & DRM_VMW_CURSOR_BYPASS_ALL) {
+
+		list_for_each_entry(crtc, &dev->mode_config.crtc_list, head) {
+			du = vmw_crtc_to_du(crtc);
+			du->hotspot_x = arg->xhot;
+			du->hotspot_y = arg->yhot;
+		}
+
+		mutex_unlock(&dev->mode_config.mutex);
+		return 0;
+	}
+
+	obj = drm_mode_object_find(dev, arg->crtc_id, DRM_MODE_OBJECT_CRTC);
+	if (!obj) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	crtc = obj_to_crtc(obj);
+	du = vmw_crtc_to_du(crtc);
+
+	du->hotspot_x = arg->xhot;
+	du->hotspot_y = arg->yhot;
+
+out:
+	mutex_unlock(&dev->mode_config.mutex);
+
+	return ret;
 }
 
 int vmw_kms_save_vga(struct vmw_private *vmw_priv)

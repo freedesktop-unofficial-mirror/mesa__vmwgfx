@@ -56,7 +56,8 @@ struct vmw_framebuffer
  * Basic cursor manipulation
  */
 int vmw_cursor_update_image(struct vmw_private *dev_priv,
-			    u32 *image, u32 width, u32 height);
+			    u32 *image, u32 width, u32 height,
+			    u32 hotspotX, u32 hotspotY);
 void vmw_cursor_update_position(struct vmw_private *dev_priv,
 				bool show, int x, int y);
 
@@ -79,6 +80,9 @@ struct vmw_display_unit
 
 	int cursor_x;
 	int cursor_y;
+
+	int hotspot_x;
+	int hotspot_y;
 
 	unsigned unit;
 };
