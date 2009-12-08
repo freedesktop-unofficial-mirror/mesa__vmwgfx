@@ -132,6 +132,7 @@ static int vmw_overlay_send_put(struct vmw_private *dev_priv,
 		} body;
 		struct vmw_escape_video_flush flush;
 	} *cmds;
+	uint32_t offset;
 	int i;
 
 	cmds = vmw_fifo_reserve(dev_priv, sizeof(*cmds));
@@ -144,9 +145,11 @@ static int vmw_overlay_send_put(struct vmw_private *dev_priv,
 		cmds->body.items[i].registerId = i;
 	}
 
+	offset = buf->base.offset + arg->offset;
+
 	cmds->body.items[SVGA_VIDEO_ENABLED].value     = true;
 	cmds->body.items[SVGA_VIDEO_FLAGS].value       = arg->flags;
-	cmds->body.items[SVGA_VIDEO_DATA_OFFSET].value = buf->base.offset + arg->offset;
+	cmds->body.items[SVGA_VIDEO_DATA_OFFSET].value = offset;
 	cmds->body.items[SVGA_VIDEO_FORMAT].value      = arg->format;
 	cmds->body.items[SVGA_VIDEO_COLORKEY].value    = arg->color_key;
 	cmds->body.items[SVGA_VIDEO_SIZE].value        = arg->size;
@@ -291,7 +294,8 @@ int vmw_overlay_resume_all(struct vmw_private *dev_priv)
 		ret = vmw_overlay_update_stream(dev_priv, stream->buf,
 						&stream->saved);
 		if (ret != 0)
-			DRM_INFO("%s: *warning* failed to resume stream %u\n", __func__, i);
+			DRM_INFO("%s: *warning* failed to resume stream %i\n",
+				 __func__, i);
 	}
 
 	return 0;
@@ -304,7 +308,8 @@ int vmw_overlay_pause_all(struct vmw_private *dev_priv)
 
 	for (i = 0; i < VMW_MAX_NUM_STREAMS; i++) {
 		if (overlay->stream[i].paused)
-			DRM_INFO("%s: *warning* stream already paused\n", __func__);
+			DRM_INFO("%s: *warning* stream %i already paused\n",
+				 __func__, i);
 		ret = vmw_overlay_stop(dev_priv, i, true);
 		WARN_ON(ret != 0);
 	}
