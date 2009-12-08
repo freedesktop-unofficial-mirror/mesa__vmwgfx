@@ -343,9 +343,13 @@ int vmw_overlay_init(struct vmw_private *dev_priv)
 	struct vmw_overlay *overlay;
 	int i;
 
-	if (dev_priv->overlay_priv) {
-		DRM_INFO("overlay system already on\n");
+	if (dev_priv->overlay_priv)
 		return -EINVAL;
+
+	if (!(dev_priv->fifo.capabilities & SVGA_FIFO_CAP_VIDEO) &&
+	     (dev_priv->fifo.capabilities & SVGA_FIFO_CAP_ESCAPE)) {
+		DRM_INFO("hardware doesn't support overlays\n");
+		return -ENOSYS;
 	}
 
 	overlay = kmalloc(GFP_KERNEL, sizeof(*overlay));

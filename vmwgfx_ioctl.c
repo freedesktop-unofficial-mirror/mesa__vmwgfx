@@ -35,10 +35,12 @@ int vmw_getparam_ioctl(struct drm_device *dev, void *data,
 	struct drm_vmw_getparam_arg *param =
 	    (struct drm_vmw_getparam_arg *)data;
 
-	DRM_INFO("Getparam\n");
 	switch (param->param) {
 	case DRM_VMW_PARAM_FIFO_OFFSET:
 		param->value = dev_priv->mmio_start;
+		break;
+	case DRM_VMW_PARAM_OVERLAY_IOCTL:
+		param->value = dev_priv->overlay_priv ? 1 : 0;
 		break;
 	default:
 		DRM_ERROR("Illegal vmwgfx get param request: %d\n",
@@ -46,7 +48,6 @@ int vmw_getparam_ioctl(struct drm_device *dev, void *data,
 		return -EINVAL;
 	}
 
-	DRM_INFO("Getparam returning 0\n");
 	return 0;
 }
 
