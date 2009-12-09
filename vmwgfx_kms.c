@@ -68,6 +68,8 @@ int vmw_cursor_update_image(struct vmw_private *dev_priv,
 
 	memset(cmd, 0, sizeof(*cmd));
 
+	memcpy(&cmd[1], image, image_size);
+
 	cmd->cmd = cpu_to_le32(SVGA_CMD_DEFINE_ALPHA_CURSOR);
 	cmd->cursor.id = cpu_to_le32(0);
 	cmd->cursor.width = cpu_to_le32(width);
