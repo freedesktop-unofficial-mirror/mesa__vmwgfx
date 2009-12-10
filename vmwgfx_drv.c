@@ -101,7 +101,6 @@
 
 static struct drm_ioctl_desc vmw_ioctls[] = {
 	VMW_IOCTL_DEF(DRM_IOCTL_VMW_GET_PARAM, vmw_getparam_ioctl, 0),
-	VMW_IOCTL_DEF(DRM_IOCTL_VMW_EXTENSION, vmw_extension_ioctl, 0),
 	VMW_IOCTL_DEF(DRM_IOCTL_VMW_CREATE_CONTEXT, vmw_context_define_ioctl,
 		      0),
 	VMW_IOCTL_DEF(DRM_IOCTL_VMW_UNREF_CONTEXT, vmw_context_destroy_ioctl,

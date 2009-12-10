@@ -34,7 +34,6 @@
 #define DRM_VMW_EXT_NAME_LEN 128
 
 #define DRM_VMW_GET_PARAM            1
-#define DRM_VMW_EXTENSION            2
 #define DRM_VMW_CREATE_CONTEXT       3
 #define DRM_VMW_UNREF_CONTEXT        4
 #define DRM_VMW_CREATE_SURFACE       5

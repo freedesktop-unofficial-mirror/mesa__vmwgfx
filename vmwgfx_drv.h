@@ -363,8 +363,6 @@ extern int vmw_dmabuf_from_vram(struct vmw_private *vmw_priv,
 
 extern int vmw_getparam_ioctl(struct drm_device *dev, void *data,
 			      struct drm_file *file_priv);
-extern int vmw_extension_ioctl(struct drm_device *dev, void *data,
-			       struct drm_file *file_priv);
 extern int vmw_fifo_debug_ioctl(struct drm_device *dev, void *data,
 				struct drm_file *file_priv);
 

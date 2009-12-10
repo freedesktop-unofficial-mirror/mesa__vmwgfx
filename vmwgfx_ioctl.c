@@ -51,12 +51,6 @@ int vmw_getparam_ioctl(struct drm_device *dev, void *data,
 	return 0;
 }
 
-int vmw_extension_ioctl(struct drm_device *dev, void *data,
-			struct drm_file *file_priv)
-{
-	return 0;
-}
-
 int vmw_fifo_debug_ioctl(struct drm_device *dev, void *data,
 			 struct drm_file *file_priv)
 {
