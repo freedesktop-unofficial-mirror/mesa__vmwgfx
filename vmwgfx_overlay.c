@@ -49,6 +49,7 @@ struct vmw_overlay {
 	/*
 	 * Each stream is a single overlay. In Xv these are called ports.
 	 */
+	struct mutex mutex;
 	struct vmw_stream stream[VMW_MAX_NUM_STREAMS];
 };
 
@@ -210,6 +211,8 @@ static int vmw_overlay_send_stop(struct vmw_private *dev_priv,
  * but left in vram. This allows for instance mode_set to evict it
  * should it need to.
  *
+ * The caller must hold the overlay lock.
+ *
  * @stream_id which stream to stop/pause.
  * @pause true to pause, false to stop completely.
  */
@@ -244,6 +247,11 @@ static int vmw_overlay_stop(struct vmw_private *dev_priv,
 	return 0;
 }
 
+/**
+ * Update a stream and send any put or stop fifo commands needed.
+ *
+ * The caller must hold the overlay lock.
+ */
 static int vmw_overlay_update_stream(struct vmw_private *dev_priv,
 				     struct vmw_dma_buffer *buf,
 				     struct drm_vmw_overlay_arg *arg)
@@ -289,10 +297,53 @@ static int vmw_overlay_update_stream(struct vmw_private *dev_priv,
 	return 0;
 }
 
+/**
+ * Stop all streams.
+ *
+ * Used by the fb code when starting.
+ *
+ * Takes the overlay lock.
+ */
+int vmw_overlay_stop_all(struct vmw_private *dev_priv)
+{
+	struct vmw_overlay *overlay = dev_priv->overlay_priv;
+	int i, ret;
+
+	if (!overlay)
+		return 0;
+
+	mutex_lock(&overlay->mutex);
+
+	for (i = 0; i < VMW_MAX_NUM_STREAMS; i++) {
+		struct vmw_stream *stream = &overlay->stream[i];
+		if (!stream->buf)
+			continue;
+
+		ret = vmw_overlay_stop(dev_priv, i, false);
+		WARN_ON(ret != 0);
+	}
+
+	mutex_unlock(&overlay->mutex);
+
+	return 0;
+}
+
+/**
+ * Try to resume all paused streams.
+ *
+ * Used by the kms code after moving a new scanout buffer to vram.
+ *
+ * Takes the overlay lock.
+ */
 int vmw_overlay_resume_all(struct vmw_private *dev_priv)
 {
 	struct vmw_overlay *overlay = dev_priv->overlay_priv;
 	int i, ret;
+
+	if (!overlay)
+		return 0;
+
+	mutex_lock(&overlay->mutex);
 
 	for (i = 0; i < VMW_MAX_NUM_STREAMS; i++) {
 		struct vmw_stream *stream = &overlay->stream[i];
@@ -306,13 +357,27 @@ int vmw_overlay_resume_all(struct vmw_private *dev_priv)
 				 __func__, i);
 	}
 
+	mutex_unlock(&overlay->mutex);
+
 	return 0;
 }
 
+/**
+ * Pauses all active streams.
+ *
+ * Used by the kms code when moving a new scanout buffer to vram.
+ *
+ * Takes the overlay lock.
+ */
 int vmw_overlay_pause_all(struct vmw_private *dev_priv)
 {
 	struct vmw_overlay *overlay = dev_priv->overlay_priv;
 	int i, ret;
+
+	if (!overlay)
+		return 0;
+
+	mutex_lock(&overlay->mutex);
 
 	for (i = 0; i < VMW_MAX_NUM_STREAMS; i++) {
 		if (overlay->stream[i].paused)
@@ -321,6 +386,9 @@ int vmw_overlay_pause_all(struct vmw_private *dev_priv)
 		ret = vmw_overlay_stop(dev_priv, i, true);
 		WARN_ON(ret != 0);
 	}
+
+	mutex_unlock(&overlay->mutex);
+
 	return 0;
 }
 
@@ -329,6 +397,7 @@ int vmw_overlay_ioctl(struct drm_device *dev, void *data,
 {
 	struct ttm_object_file *tfile = vmw_fpriv(file_priv)->tfile;
 	struct vmw_private *dev_priv = vmw_priv(dev);
+	struct vmw_overlay *overlay = dev_priv->overlay_priv;
 	struct drm_vmw_overlay_arg *arg =
 	    (struct drm_vmw_overlay_arg *)data;
 	struct vmw_dma_buffer *buf;
@@ -337,16 +406,26 @@ int vmw_overlay_ioctl(struct drm_device *dev, void *data,
 	if (arg->stream_id > VMW_MAX_NUM_STREAMS)
 		return -EINVAL;
 
-	if (!arg->enabled)
-		return vmw_overlay_stop(dev_priv, arg->stream_id, false);
+	if (!overlay)
+		return -ENOSYS;
+
+	mutex_lock(&overlay->mutex);
+
+	if (!arg->enabled) {
+		ret = vmw_overlay_stop(dev_priv, arg->stream_id, false);
+		goto out_unlock;
+	}
 
 	ret = vmw_user_dmabuf_lookup(tfile, arg->handle, &buf);
 	if (ret)
-		return ret;
+		goto out_unlock;
 
 	ret = vmw_overlay_update_stream(dev_priv, buf, arg);
 
 	vmw_dmabuf_unreference(&buf);
+
+out_unlock:
+	mutex_unlock(&overlay->mutex);
 
 	return ret;
 }
@@ -370,6 +449,7 @@ int vmw_overlay_init(struct vmw_private *dev_priv)
 		return -ENOMEM;
 
 	memset(overlay, 0, sizeof(*overlay));
+	mutex_init(&overlay->mutex);
 	for (i = 0; i < VMW_MAX_NUM_STREAMS; i++) {
 		overlay->stream[i].buf = NULL;
 		overlay->stream[i].paused = false;

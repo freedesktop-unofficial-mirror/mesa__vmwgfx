@@ -460,6 +460,7 @@ int vmw_overlay_init(struct vmw_private *dev_priv);
 int vmw_overlay_close(struct vmw_private *dev_priv);
 int vmw_overlay_ioctl(struct drm_device *dev, void *data,
 		      struct drm_file *file_priv);
+int vmw_overlay_stop_all(struct vmw_private *dev_priv);
 int vmw_overlay_resume_all(struct vmw_private *dev_priv);
 int vmw_overlay_pause_all(struct vmw_private *dev_priv);
 
