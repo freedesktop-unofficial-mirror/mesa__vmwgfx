@@ -85,16 +85,33 @@ static inline void fill_flush(struct vmw_escape_video_flush *cmd,
 	cmd->flush.streamId = stream_id;
 }
 
+/**
+ * Pin or unpin a buffer in vram.
+ *
+ * @dev_priv:  Driver private.
+ * @buf:  DMA buffer to pin or unpin.
+ * @pin:  Pin buffer in vram if true.
+ * @interruptible:  Use interruptible wait.
+ *
+ * Takes the current masters ttm lock in read.
+ *
+ * Returns
+ * -ERESTARTSYS if interrupted by a signal.
+ */
 static int vmw_dmabuf_pin_in_vram(struct vmw_private *dev_priv,
 				  struct vmw_dma_buffer *buf,
-				  bool pin)
+				  bool pin, bool interruptible)
 {
 	struct ttm_buffer_object *bo = &buf->base;
 	struct ttm_bo_global *glob = bo->glob;
 	unsigned flags = 0;
 	int ret;
 
-	ret = ttm_bo_reserve(bo, false, false, false, 0);
+	ret = ttm_read_lock(&dev_priv->active_master->lock, interruptible);
+	if (unlikely(ret != 0))
+		return ret;
+
+	ret = ttm_bo_reserve(bo, interruptible, false, false, 0);
 	if (unlikely(ret != 0))
 		goto err;
 
@@ -111,20 +128,26 @@ static int vmw_dmabuf_pin_in_vram(struct vmw_private *dev_priv,
 	if (pin)
 		flags |= TTM_PL_FLAG_NO_EVICT;
 
-	ret = ttm_buffer_object_validate(bo,
-					 flags,
-					 false,
-					 false);
+	ret = ttm_buffer_object_validate(bo, flags, interruptible, false);
 
 	ttm_bo_unreserve(bo);
 
 err:
+	ttm_read_unlock(&dev_priv->active_master->lock);
+
 	return ret;
 }
 
+/**
+ * Send put command to hw.
+ *
+ * Returns
+ * -ERESTARTSYS if interrupted by a signal.
+ */
 static int vmw_overlay_send_put(struct vmw_private *dev_priv,
 				struct vmw_dma_buffer *buf,
-				struct drm_vmw_overlay_arg *arg)
+				struct drm_vmw_overlay_arg *arg,
+				bool interruptible)
 {
 	struct {
 		struct vmw_escape_header escape;
@@ -141,9 +164,20 @@ static int vmw_overlay_send_put(struct vmw_private *dev_priv,
 		struct vmw_escape_video_flush flush;
 	} *cmds;
 	uint32_t offset;
-	int i;
+	int i, ret;
 
-	cmds = vmw_fifo_reserve(dev_priv, sizeof(*cmds));
+	for (;;) {
+		cmds = vmw_fifo_reserve(dev_priv, sizeof(*cmds));
+		if (cmds)
+			break;
+
+		ret = vmw_fallback_wait(dev_priv, false, true, 0,
+					interruptible, 3*HZ);
+		if (interruptible && ret == -ERESTARTSYS)
+			return ret;
+		else
+			BUG_ON(ret != 0);
+	}
 
 	fill_escape(&cmds->escape, sizeof(cmds->body));
 	cmds->body.header.cmdType = SVGA_ESCAPE_VMWARE_VIDEO_SET_REGS;
@@ -181,16 +215,35 @@ static int vmw_overlay_send_put(struct vmw_private *dev_priv,
 	return 0;
 }
 
+/**
+ * Send stop command to hw.
+ *
+ * Returns
+ * -ERESTARTSYS if interrupted by a signal.
+ */
 static int vmw_overlay_send_stop(struct vmw_private *dev_priv,
-				 uint32_t stream_id)
+				 uint32_t stream_id,
+				 bool interruptible)
 {
 	struct {
 		struct vmw_escape_header escape;
 		SVGAEscapeVideoSetRegs body;
 		struct vmw_escape_video_flush flush;
 	} *cmds;
+	int ret;
 
-	cmds = vmw_fifo_reserve(dev_priv, sizeof(*cmds));
+	for (;;) {
+		cmds = vmw_fifo_reserve(dev_priv, sizeof(*cmds));
+		if (cmds)
+			break;
+
+		ret = vmw_fallback_wait(dev_priv, false, true, 0,
+					interruptible, 3*HZ);
+		if (interruptible && ret == -ERESTARTSYS)
+			return ret;
+		else
+			BUG_ON(ret != 0);
+	}
 
 	fill_escape(&cmds->escape, sizeof(cmds->body));
 	cmds->body.header.cmdType = SVGA_ESCAPE_VMWARE_VIDEO_SET_REGS;
@@ -217,7 +270,8 @@ static int vmw_overlay_send_stop(struct vmw_private *dev_priv,
  * @pause true to pause, false to stop completely.
  */
 static int vmw_overlay_stop(struct vmw_private *dev_priv,
-			    uint32_t stream_id, bool pause)
+			    uint32_t stream_id, bool pause,
+			    bool interruptible)
 {
 	struct vmw_overlay *overlay = dev_priv->overlay_priv;
 	struct vmw_stream *stream = &overlay->stream[stream_id];
@@ -229,12 +283,18 @@ static int vmw_overlay_stop(struct vmw_private *dev_priv,
 
 	/* If the stream is paused this is already done */
 	if (!stream->paused) {
-		ret = vmw_overlay_send_stop(dev_priv, stream_id);
+		ret = vmw_overlay_send_stop(dev_priv, stream_id,
+					    interruptible);
 		if (ret)
 			return ret;
 
-		ret = vmw_dmabuf_pin_in_vram(dev_priv, stream->buf, false);
-		WARN_ON(ret != 0);
+		/* We just remove the NO_EVICT flag so no -ENOMEM */
+		ret = vmw_dmabuf_pin_in_vram(dev_priv, stream->buf, false,
+					     interruptible);
+		if (interruptible && ret == -ERESTARTSYS)
+			return ret;
+		else
+			BUG_ON(ret != 0);
 	}
 
 	if (!pause) {
@@ -251,10 +311,15 @@ static int vmw_overlay_stop(struct vmw_private *dev_priv,
  * Update a stream and send any put or stop fifo commands needed.
  *
  * The caller must hold the overlay lock.
+ *
+ * Returns
+ * -ENOMEM if buffer doesn't fit in vram.
+ * -ERESTARTSYS if interrupted.
  */
 static int vmw_overlay_update_stream(struct vmw_private *dev_priv,
 				     struct vmw_dma_buffer *buf,
-				     struct drm_vmw_overlay_arg *arg)
+				     struct drm_vmw_overlay_arg *arg,
+				     bool interruptible)
 {
 	struct vmw_overlay *overlay = dev_priv->overlay_priv;
 	struct vmw_stream *stream = &overlay->stream[arg->stream_id];
@@ -267,26 +332,36 @@ static int vmw_overlay_update_stream(struct vmw_private *dev_priv,
 		  stream->buf, buf, stream->paused ? "" : "not ");
 
 	if (stream->buf != buf) {
-		ret = vmw_overlay_stop(dev_priv, arg->stream_id, false);
+		ret = vmw_overlay_stop(dev_priv, arg->stream_id,
+				       false, interruptible);
 		if (ret)
 			return ret;
 	} else if (!stream->paused) {
 		/* If the buffers match and not paused then just send
 		 * the put command, no need to do anything else.
 		 */
-		ret = vmw_overlay_send_put(dev_priv, buf, arg);
+		ret = vmw_overlay_send_put(dev_priv, buf, arg, interruptible);
 		if (ret == 0)
 			stream->saved = *arg;
+		else
+			BUG_ON(!interruptible);
+
 		return ret;
 	}
 
-	ret = vmw_dmabuf_pin_in_vram(dev_priv, buf, true);
+	/* We don't start the old stream if we are interrupted.
+	 * Might return -ENOMEM if it can't fit the buffer in vram.
+	 */
+	ret = vmw_dmabuf_pin_in_vram(dev_priv, buf, true, interruptible);
 	if (ret)
 		return ret;
 
-	ret = vmw_overlay_send_put(dev_priv, buf, arg);
+	ret = vmw_overlay_send_put(dev_priv, buf, arg, interruptible);
 	if (ret) {
-		WARN_ON(vmw_dmabuf_pin_in_vram(dev_priv, buf, false) != 0);
+		/* This one needs to happen no matter what. We only remove
+		 * the NO_EVICT flag so this is safe from -ENOMEM.
+		 */
+		BUG_ON(vmw_dmabuf_pin_in_vram(dev_priv, buf, false, false) != 0);
 		return ret;
 	}
 
@@ -319,7 +394,7 @@ int vmw_overlay_stop_all(struct vmw_private *dev_priv)
 		if (!stream->buf)
 			continue;
 
-		ret = vmw_overlay_stop(dev_priv, i, false);
+		ret = vmw_overlay_stop(dev_priv, i, false, false);
 		WARN_ON(ret != 0);
 	}
 
@@ -351,7 +426,7 @@ int vmw_overlay_resume_all(struct vmw_private *dev_priv)
 			continue;
 
 		ret = vmw_overlay_update_stream(dev_priv, stream->buf,
-						&stream->saved);
+						&stream->saved, false);
 		if (ret != 0)
 			DRM_INFO("%s: *warning* failed to resume stream %i\n",
 				 __func__, i);
@@ -383,7 +458,7 @@ int vmw_overlay_pause_all(struct vmw_private *dev_priv)
 		if (overlay->stream[i].paused)
 			DRM_INFO("%s: *warning* stream %i already paused\n",
 				 __func__, i);
-		ret = vmw_overlay_stop(dev_priv, i, true);
+		ret = vmw_overlay_stop(dev_priv, i, true, false);
 		WARN_ON(ret != 0);
 	}
 
@@ -412,7 +487,7 @@ int vmw_overlay_ioctl(struct drm_device *dev, void *data,
 	mutex_lock(&overlay->mutex);
 
 	if (!arg->enabled) {
-		ret = vmw_overlay_stop(dev_priv, arg->stream_id, false);
+		ret = vmw_overlay_stop(dev_priv, arg->stream_id, false, true);
 		goto out_unlock;
 	}
 
@@ -420,7 +495,7 @@ int vmw_overlay_ioctl(struct drm_device *dev, void *data,
 	if (ret)
 		goto out_unlock;
 
-	ret = vmw_overlay_update_stream(dev_priv, buf, arg);
+	ret = vmw_overlay_update_stream(dev_priv, buf, arg, true);
 
 	vmw_dmabuf_unreference(&buf);
 
@@ -472,7 +547,7 @@ int vmw_overlay_close(struct vmw_private *dev_priv)
 	for (i = 0; i < VMW_MAX_NUM_STREAMS; i++) {
 		if (overlay->stream[i].buf) {
 			forgotten_buffer = true;
-			vmw_overlay_stop(dev_priv, i, false);
+			vmw_overlay_stop(dev_priv, i, false, false);
 		}
 	}
 
