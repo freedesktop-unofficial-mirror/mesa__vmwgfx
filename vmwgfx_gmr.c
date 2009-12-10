@@ -38,9 +38,9 @@ static int vmw_gmr_build_descriptors(struct list_head *desc_pages,
 				     struct page *pages[],
 				     unsigned long num_pages)
 {
-  struct page *page, *next;
+	struct page *page, *next;
 	struct svga_guest_mem_descriptor *page_virtual = NULL;
-	struct svga_guest_mem_descriptor *desc_virtual;
+	struct svga_guest_mem_descriptor *desc_virtual = NULL;
 	unsigned int desc_per_page;
 	unsigned long prev_pfn;
 	unsigned long pfn;

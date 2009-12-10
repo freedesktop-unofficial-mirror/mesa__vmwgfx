@@ -33,8 +33,7 @@
 
 #define VMW_DIRTY_DELAY (HZ / 30)
 
-struct vmw_fb_par
-{
+struct vmw_fb_par {
 	struct vmw_private *vmw_priv;
 
 	void *vmalloc;
@@ -214,7 +213,7 @@ static void vmw_fb_dirty_flush(struct vmw_fb_par *par)
 	struct vmw_private *vmw_priv = par->vmw_priv;
 	struct fb_info *info = vmw_priv->fb_info;
 	int stride = (info->fix.line_length / 4);
-	int *src = (int*)info->screen_base;
+	int *src = (int *)info->screen_base;
 	__le32 __iomem *vram_mem = par->bo_ptr;
 	unsigned long flags;
 	unsigned x, y, w, h;
@@ -305,7 +304,7 @@ static void vmw_deferred_io(struct fb_info *info,
 	max = 0;
 	list_for_each_entry(page, pagelist, lru) {
 		start = page->index << PAGE_SHIFT;
-		end = start + PAGE_SIZE -1;
+		end = start + PAGE_SIZE - 1;
 		min = min(min, start);
 		max = max(max, end);
 	}

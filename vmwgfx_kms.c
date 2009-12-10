@@ -57,6 +57,9 @@ int vmw_cursor_update_image(struct vmw_private *dev_priv,
 	u32 image_size = width * height * 4;
 	u32 cmd_size = sizeof(*cmd) + image_size;
 
+	if (!image)
+		return -EINVAL;
+
 	cmd = vmw_fifo_reserve(dev_priv, cmd_size);
 	if (unlikely(cmd == NULL)) {
 		DRM_ERROR("Fifo reserve failed.\n");
@@ -64,13 +67,6 @@ int vmw_cursor_update_image(struct vmw_private *dev_priv,
 	}
 
 	memset(cmd, 0, sizeof(*cmd));
-
-	/* TODO remove this debug test */
-	if (image) {
-		memcpy(&cmd[1], image, image_size);
-	} else {
-		memset(&cmd[1], 0xff, image_size);
-	}
 
 	cmd->cmd = cpu_to_le32(SVGA_CMD_DEFINE_ALPHA_CURSOR);
 	cmd->cursor.id = cpu_to_le32(0);
@@ -91,10 +87,10 @@ void vmw_cursor_update_position(struct vmw_private *dev_priv,
 	uint32_t count;
 
 	iowrite32(show ? 1 : 0, fifo_mem + SVGA_FIFO_CURSOR_ON);
-	iowrite32(x,            fifo_mem + SVGA_FIFO_CURSOR_X);
-	iowrite32(y,            fifo_mem + SVGA_FIFO_CURSOR_Y);
-	count = ioread32(       fifo_mem + SVGA_FIFO_CURSOR_COUNT);
-	iowrite32(++count,      fifo_mem + SVGA_FIFO_CURSOR_COUNT);
+	iowrite32(x, fifo_mem + SVGA_FIFO_CURSOR_X);
+	iowrite32(y, fifo_mem + SVGA_FIFO_CURSOR_Y);
+	count = ioread32(fifo_mem + SVGA_FIFO_CURSOR_COUNT);
+	iowrite32(++count, fifo_mem + SVGA_FIFO_CURSOR_COUNT);
 }
 
 int vmw_du_crtc_cursor_set(struct drm_crtc *crtc, struct drm_file *file_priv,
@@ -130,12 +126,11 @@ int vmw_du_crtc_cursor_set(struct drm_crtc *crtc, struct drm_file *file_priv,
 		du->cursor_surface->snooper.crtc = NULL;
 		vmw_surface_unreference(&du->cursor_surface);
 	}
-	if (du->cursor_dmabuf) {
+	if (du->cursor_dmabuf)
 		vmw_dmabuf_unreference(&du->cursor_dmabuf);
-	}
 
 	/* setup new image */
-	if (surface) { 
+	if (surface) {
 		/* vmw_user_surface_lookup takes one reference */
 		du->cursor_surface = surface;
 
@@ -163,16 +158,15 @@ int vmw_du_crtc_cursor_set(struct drm_crtc *crtc, struct drm_file *file_priv,
 		}
 
 		ret = ttm_bo_kmap(&dmabuf->base, kmap_offset, kmap_num, &map);
-		if (unlikely(ret != 0)) {
+		if (unlikely(ret != 0))
 			goto err_unreserve;
-		}
 
 		virtual = ttm_kmap_obj_virtual(&map, &dummy);
 		vmw_cursor_update_image(dev_priv, virtual, 64, 64,
 					du->hotspot_x, du->hotspot_y);
 
 		ttm_bo_kunmap(&map);
-		err_unreserve:
+err_unreserve:
 		ttm_bo_unreserve(&dmabuf->base);
 
 	} else {
@@ -205,7 +199,6 @@ void vmw_kms_cursor_snoop(struct vmw_surface *srf,
 			  struct ttm_buffer_object *bo,
 			  SVGA3dCmdHeader *header)
 {
-	struct vmw_private *dev_priv = srf->res.dev_priv;
 	struct ttm_bo_kmap_obj map;
 	unsigned long kmap_offset;
 	unsigned long kmap_num;
@@ -262,22 +255,22 @@ void vmw_kms_cursor_snoop(struct vmw_surface *srf,
 	}
 
 	ret = ttm_bo_kmap(bo, kmap_offset, kmap_num, &map);
-	if (unlikely(ret != 0)) {
+	if (unlikely(ret != 0))
 		goto err_unreserve;
-	}
 
 	virtual = ttm_kmap_obj_virtual(&map, &dummy);
 
 	memcpy(srf->snooper.image, virtual, 64*64*4);
 	srf->snooper.age++;
 
-	/* TODO we can't call this function from this function since execbuf has
+	/* we can't call this function from this function since execbuf has
 	 * reserved fifo space.
 	 *
 	 * if (srf->snooper.crtc)
-	 *	vmw_ldu_crtc_cursor_update_image(dev_priv, srf->snooper.image, 64, 64);
+	 *	vmw_ldu_crtc_cursor_update_image(dev_priv,
+	 *					 srf->snooper.image, 64, 64,
+	 *					 du->hotspot_x, du->hotspot_y);
 	 */
-	(void)dev_priv;
 
 	ttm_bo_kunmap(&map);
 err_unreserve:
@@ -328,8 +321,7 @@ int vmw_framebuffer_create_handle(struct drm_framebuffer *fb,
 #define vmw_framebuffer_to_vfbs(x) \
 	container_of(x, struct vmw_framebuffer_surface, base.base)
 
-struct vmw_framebuffer_surface
-{
+struct vmw_framebuffer_surface {
 	struct vmw_framebuffer base;
 	struct vmw_surface *surface;
 	struct delayed_work d_work;
@@ -396,14 +388,16 @@ out_unlock:
 
 int vmw_framebuffer_surface_dirty(struct drm_framebuffer *framebuffer,
 				  unsigned flags, unsigned color,
-				  struct drm_clip_rect *clips, unsigned num_clips)
+				  struct drm_clip_rect *clips,
+				  unsigned num_clips)
 {
 	struct vmw_private *dev_priv = vmw_priv(framebuffer->dev);
-	struct vmw_framebuffer_surface *vfbs = vmw_framebuffer_to_vfbs(framebuffer);
+	struct vmw_framebuffer_surface *vfbs =
+		vmw_framebuffer_to_vfbs(framebuffer);
 	struct vmw_surface *surf = vfbs->surface;
 	struct drm_clip_rect norect;
 	SVGA3dCopyRect *cr;
-	int i, increment = 1;
+	int i, inc = 1;
 
 	struct {
 		SVGA3dCmdHeader header;
@@ -412,7 +406,7 @@ int vmw_framebuffer_surface_dirty(struct drm_framebuffer *framebuffer,
 	} *cmd;
 
 	if (!num_clips ||
-            !(dev_priv->fifo.capabilities &
+	    !(dev_priv->fifo.capabilities &
 	      SVGA_FIFO_CAP_SCREEN_OBJECT)) {
 		int ret;
 
@@ -437,7 +431,7 @@ int vmw_framebuffer_surface_dirty(struct drm_framebuffer *framebuffer,
 		norect.y2 = framebuffer->height;
 	} else if (flags & DRM_MODE_FB_DIRTY_ANNOTATE_COPY) {
 		num_clips /= 2;
-		increment = 2;
+		inc = 2; /* skip source rects */
 	}
 
 	cmd = vmw_fifo_reserve(dev_priv, sizeof(*cmd) + (num_clips - 1) * sizeof(cmd->cr));
@@ -452,7 +446,7 @@ int vmw_framebuffer_surface_dirty(struct drm_framebuffer *framebuffer,
 	cmd->header.size = cpu_to_le32(sizeof(cmd->body) + num_clips * sizeof(cmd->cr));
 	cmd->body.sid = cpu_to_le32(surf->res.id);
 
-	for (i = 0, cr = &cmd->cr; i < num_clips; i++, cr++, clips += increment) {
+	for (i = 0, cr = &cmd->cr; i < num_clips; i++, cr++, clips += inc) {
 		cr->x = cpu_to_le16(clips->x1);
 		cr->y = cpu_to_le16(clips->y1);
 		cr->srcx = cr->x;
@@ -488,20 +482,20 @@ int vmw_kms_new_framebuffer_surface(struct vmw_private *dev_priv,
 		goto out_err1;
 	}
 
-	ret = drm_framebuffer_init(dev, &vfbs->base.base, &vmw_framebuffer_surface_funcs);
-	if (ret) {
+	ret = drm_framebuffer_init(dev, &vfbs->base.base,
+				   &vmw_framebuffer_surface_funcs);
+	if (ret)
 		goto out_err2;
-	}
 
 	if (!vmw_surface_reference(surface)) {
 		DRM_ERROR("failed to reference surface %p\n", surface);
 		goto out_err3;
 	}
 
-	/* get the first 3 from the surface info */
-	vfbs->base.base.bits_per_pixel = 32;//???
-	vfbs->base.base.pitch = width * 32 / 4;//???
-	vfbs->base.base.depth = 24;//???
+	/* XXX get the first 3 from the surface info */
+	vfbs->base.base.bits_per_pixel = 32;
+	vfbs->base.base.pitch = width * 32 / 4;
+	vfbs->base.base.depth = 24;
 	vfbs->base.base.width = width;
 	vfbs->base.base.height = height;
 	vfbs->base.pin = NULL;
@@ -528,8 +522,7 @@ out_err1:
 #define vmw_framebuffer_to_vfbd(x) \
 	container_of(x, struct vmw_framebuffer_dmabuf, base.base)
 
-struct vmw_framebuffer_dmabuf
-{
+struct vmw_framebuffer_dmabuf {
 	struct vmw_framebuffer base;
 	struct vmw_dma_buffer *buffer;
 };
@@ -547,7 +540,8 @@ void vmw_framebuffer_dmabuf_destroy(struct drm_framebuffer *framebuffer)
 
 int vmw_framebuffer_dmabuf_dirty(struct drm_framebuffer *framebuffer,
 				 unsigned flags, unsigned color,
-				 struct drm_clip_rect *clips, unsigned num_clips)
+				 struct drm_clip_rect *clips,
+				 unsigned num_clips)
 {
 	struct vmw_private *dev_priv = vmw_priv(framebuffer->dev);
 	struct drm_clip_rect norect;
@@ -558,7 +552,7 @@ int vmw_framebuffer_dmabuf_dirty(struct drm_framebuffer *framebuffer,
 	int i, increment = 1;
 
 	if (!num_clips ||
-            !(dev_priv->fifo.capabilities &
+	    !(dev_priv->fifo.capabilities &
 	      SVGA_FIFO_CAP_SCREEN_OBJECT)) {
 		num_clips = 1;
 		clips = &norect;
@@ -598,7 +592,8 @@ static struct drm_framebuffer_funcs vmw_framebuffer_dmabuf_funcs = {
 static int vmw_framebuffer_dmabuf_pin(struct vmw_framebuffer *vfb)
 {
 	struct vmw_private *dev_priv = vmw_priv(vfb->base.dev);
-	struct vmw_framebuffer_dmabuf *vfbd= vmw_framebuffer_to_vfbd(&vfb->base);
+	struct vmw_framebuffer_dmabuf *vfbd =
+		vmw_framebuffer_to_vfbd(&vfb->base);
 	int ret;
 
 	vmw_overlay_pause_all(dev_priv);
@@ -634,7 +629,8 @@ static int vmw_framebuffer_dmabuf_pin(struct vmw_framebuffer *vfb)
 static int vmw_framebuffer_dmabuf_unpin(struct vmw_framebuffer *vfb)
 {
 	struct vmw_private *dev_priv = vmw_priv(vfb->base.dev);
-	struct vmw_framebuffer_dmabuf *vfbd= vmw_framebuffer_to_vfbd(&vfb->base);
+	struct vmw_framebuffer_dmabuf *vfbd =
+		vmw_framebuffer_to_vfbd(&vfb->base);
 
 	if (!vfbd->buffer) {
 		WARN_ON(!vfbd->buffer);
@@ -660,20 +656,20 @@ int vmw_kms_new_framebuffer_dmabuf(struct vmw_private *dev_priv,
 		goto out_err1;
 	}
 
-	ret = drm_framebuffer_init(dev, &vfbd->base.base, &vmw_framebuffer_dmabuf_funcs);
-	if (ret) {
+	ret = drm_framebuffer_init(dev, &vfbd->base.base,
+				   &vmw_framebuffer_dmabuf_funcs);
+	if (ret)
 		goto out_err2;
-	}
 
 	if (!vmw_dmabuf_reference(dmabuf)) {
 		DRM_ERROR("failed to reference dmabuf %p\n", dmabuf);
 		goto out_err3;
 	}
 
-	/* get the first 3 from the surface info */
-	vfbd->base.base.bits_per_pixel = 32;//???
-	vfbd->base.base.pitch = width * 32 / 4;//???
-	vfbd->base.base.depth = 24;//???
+	/* XXX get the first 3 from the surface info */
+	vfbd->base.base.bits_per_pixel = 32;
+	vfbd->base.base.pitch = width * 32 / 4;
+	vfbd->base.base.depth = 24;
 	vfbd->base.base.width = width;
 	vfbd->base.base.height = height;
 	vfbd->base.pin = vmw_framebuffer_dmabuf_pin;
@@ -695,7 +691,7 @@ out_err1:
  * Generic Kernel modesetting functions
  */
 
-static struct drm_framebuffer* vmw_kms_fb_create(struct drm_device *dev,
+static struct drm_framebuffer *vmw_kms_fb_create(struct drm_device *dev,
 						 struct drm_file *file_priv,
 						 struct drm_mode_fb_cmd *mode_cmd)
 {

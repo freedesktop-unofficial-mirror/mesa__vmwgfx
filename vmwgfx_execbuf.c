@@ -34,7 +34,7 @@ static int vmw_cmd_invalid(struct vmw_private *dev_priv,
 			   struct vmw_sw_context *sw_context,
 			   SVGA3dCmdHeader *header)
 {
-	return (capable(CAP_SYS_ADMIN) ? : -EINVAL);
+	return capable(CAP_SYS_ADMIN) ? : -EINVAL;
 }
 
 static int vmw_cmd_ok(struct vmw_private *dev_priv,
@@ -53,7 +53,7 @@ static int vmw_cmd_cid_check(struct vmw_private *dev_priv,
 		__le32 cid;
 	} *cmd;
 	int ret;
-	
+
 	cmd = container_of(header, struct vmw_cid_cmd, header);
 	if (likely(sw_context->cid_valid && cmd->cid == sw_context->last_cid))
 		return 0;
@@ -64,7 +64,7 @@ static int vmw_cmd_cid_check(struct vmw_private *dev_priv,
 			  (unsigned) cmd->cid);
 		return ret;
 	}
-	
+
 	sw_context->last_cid = cmd->cid;
 	sw_context->cid_valid = true;
 
@@ -244,7 +244,7 @@ out_no_reloc:
 }
 
 
-typedef int (*vmw_cmd_func) (struct vmw_private *, 
+typedef int (*vmw_cmd_func) (struct vmw_private *,
 			     struct vmw_sw_context *,
 			     SVGA3dCmdHeader *);
 
@@ -285,7 +285,7 @@ static vmw_cmd_func vmw_cmd_funcs[SVGA_3D_CMD_MAX] = {
 	VMW_CMD_DEF(SVGA_3D_CMD_BLIT_SURFACE_TO_SCREEN,
 		    &vmw_cmd_blt_surf_screen_check)
 };
-	
+
 static int vmw_cmd_check(struct vmw_private *dev_priv,
 			 struct vmw_sw_context *sw_context,
 			 void *buf, uint32_t *size)
@@ -304,9 +304,8 @@ static int vmw_cmd_check(struct vmw_private *dev_priv,
 	*size = le32_to_cpu(header->size) + sizeof(SVGA3dCmdHeader);
 
 	cmd_id -= SVGA_3D_CMD_BASE;
-	if (unlikely(cmd_id >= SVGA_3D_CMD_MAX - SVGA_3D_CMD_BASE)) {
+	if (unlikely(cmd_id >= SVGA_3D_CMD_MAX - SVGA_3D_CMD_BASE))
 		goto out_err;
-	}
 
 	ret = vmw_cmd_funcs[cmd_id](dev_priv, sw_context, header);
 	if (unlikely(ret != 0))
@@ -326,7 +325,7 @@ static int vmw_cmd_check_all(struct vmw_private *dev_priv,
 	int32_t cur_size = size;
 	int ret;
 
-	while(cur_size > 0) {
+	while (cur_size > 0) {
 		ret = vmw_cmd_check(dev_priv, sw_context, buf, &size);
 		if (unlikely(ret != 0))
 			return ret;
@@ -354,7 +353,7 @@ static void vmw_apply_relocations(struct vmw_sw_context *sw_context)
 	struct ttm_validate_buffer *validate;
 	struct ttm_buffer_object *bo;
 
-	for(i=0; i<sw_context->cur_reloc; ++i) {
+	for (i = 0; i < sw_context->cur_reloc; ++i) {
 		reloc = &sw_context->relocs[i];
 		validate = &sw_context->val_bufs[reloc->index];
 		bo = validate->bo;
@@ -466,7 +465,7 @@ int vmw_execbuf_ioctl(struct drm_device *dev, void *data,
 	if (unlikely(ret != 0))
 		goto out_err;
 
-	ret = vmw_validate_buffers(dev_priv,sw_context);
+	ret = vmw_validate_buffers(dev_priv, sw_context);
 	if (unlikely(ret != 0))
 		goto out_err;
 

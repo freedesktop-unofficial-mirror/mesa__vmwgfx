@@ -41,8 +41,7 @@
  * @pin is called the when ever a crtc uses this framebuffer
  * @unpin is called
  */
-struct vmw_framebuffer
-{
+struct vmw_framebuffer {
 	struct drm_framebuffer base;
 	int (*pin)(struct vmw_framebuffer *fb);
 	int (*unpin)(struct vmw_framebuffer *fb);
@@ -68,8 +67,7 @@ void vmw_cursor_update_position(struct vmw_private *dev_priv,
  * so the display unit is all of them at the same time. This is true for both
  * legacy multimon and screen objects.
  */
-struct vmw_display_unit
-{
+struct vmw_display_unit {
 	struct drm_crtc crtc;
 	struct drm_encoder encoder;
 	struct drm_connector connector;

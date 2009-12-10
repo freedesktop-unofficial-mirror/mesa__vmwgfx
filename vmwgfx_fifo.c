@@ -71,9 +71,8 @@ int vmw_fifo_init(struct vmw_private *dev_priv, struct vmw_fifo_state *fifo)
 	vmw_write(dev_priv, SVGA_REG_ENABLE, 1);
 
 	min = 4;
-	if (dev_priv->capabilities & SVGA_CAP_EXTENDED_FIFO) {
+	if (dev_priv->capabilities & SVGA_CAP_EXTENDED_FIFO)
 		min = vmw_read(dev_priv, SVGA_REG_MEM_REGS);
-	}
 	min <<= 2;
 
 	if (min < PAGE_SIZE)
@@ -89,9 +88,9 @@ int vmw_fifo_init(struct vmw_private *dev_priv, struct vmw_fifo_state *fifo)
 
 	vmw_write(dev_priv, SVGA_REG_CONFIG_DONE, 1);
 	mutex_unlock(&dev_priv->hw_mutex);
-	
-	max = ioread32(fifo_mem+ SVGA_FIFO_MAX);
-	min = ioread32(fifo_mem+ SVGA_FIFO_MIN);
+
+	max = ioread32(fifo_mem + SVGA_FIFO_MAX);
+	min = ioread32(fifo_mem  + SVGA_FIFO_MIN);
 	fifo->capabilities = ioread32(fifo_mem + SVGA_FIFO_CAPABILITIES);
 
 	DRM_INFO("Fifo max 0x%08x min 0x%08x cap 0x%08x\n",

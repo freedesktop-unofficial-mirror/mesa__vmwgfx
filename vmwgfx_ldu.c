@@ -34,8 +34,7 @@
 #define vmw_connector_to_ldu(x) \
 	container_of(x, struct vmw_legacy_display_unit, base.connector)
 
-struct vmw_legacy_display
-{
+struct vmw_legacy_display {
 	struct list_head active;
 
 	unsigned num_active;
@@ -46,8 +45,7 @@ struct vmw_legacy_display
 /**
  * Display unit using the legacy register interface.
  */
-struct vmw_legacy_display_unit
-{
+struct vmw_legacy_display_unit {
 	struct vmw_display_unit base;
 
 	struct list_head active;
@@ -75,7 +73,9 @@ static void vmw_ldu_crtc_restore(struct drm_crtc *crtc)
 {
 }
 
-static void vmw_ldu_crtc_gamma_set(struct drm_crtc *crtc, u16 *r, u16 *g, u16 *b, uint32_t size)
+static void vmw_ldu_crtc_gamma_set(struct drm_crtc *crtc,
+				   u16 *r, u16 *g, u16 *b,
+				   uint32_t size)
 {
 }
 
@@ -101,7 +101,7 @@ static int vmw_ldu_commit_list(struct vmw_private *dev_priv)
 		vmw_write(dev_priv, SVGA_REG_DISPLAY_WIDTH, 0);
 		vmw_write(dev_priv, SVGA_REG_DISPLAY_HEIGHT, 0);
 		vmw_write(dev_priv, SVGA_REG_DISPLAY_ID, SVGA_ID_INVALID);
-	} 
+	}
 
 	/* Now set the mode */
 	vmw_write(dev_priv, SVGA_REG_NUM_GUEST_DISPLAYS, lds->num_active);
@@ -209,7 +209,7 @@ static int vmw_ldu_crtc_set_config(struct drm_mode_set *set)
 	/* ldu only supports one fb active at the time */
 	if (dev_priv->ldu_priv->fb && vfb &&
 	    dev_priv->ldu_priv->fb != vfb) {
-		DRM_ERROR("Tried to set a different fb from one already bound\n");
+		DRM_ERROR("Multiple framebuffers not supported\n");
 		return -EINVAL;
 	}
 
@@ -258,8 +258,7 @@ static int vmw_ldu_crtc_set_config(struct drm_mode_set *set)
 	return 0;
 }
 
-static struct drm_crtc_funcs vmw_legacy_crtc_funcs =
-{
+static struct drm_crtc_funcs vmw_legacy_crtc_funcs = {
 	.save = vmw_ldu_crtc_save,
 	.restore = vmw_ldu_crtc_restore,
 	.cursor_set = vmw_du_crtc_cursor_set,
@@ -278,8 +277,7 @@ static void vmw_ldu_encoder_destroy(struct drm_encoder *encoder)
 	vmw_ldu_destroy(vmw_encoder_to_ldu(encoder));
 }
 
-static struct drm_encoder_funcs vmw_legacy_encoder_funcs =
-{
+static struct drm_encoder_funcs vmw_legacy_encoder_funcs = {
 	.destroy = vmw_ldu_encoder_destroy,
 };
 
@@ -308,95 +306,97 @@ static enum drm_connector_status
 	return connector_status_disconnected;
 }
 
+static struct drm_display_mode vmw_ldu_connector_builtin[] = {
+	/* 640x480@60Hz */
+	{ DRM_MODE("640x480", DRM_MODE_TYPE_DRIVER, 25175, 640, 656,
+		   752, 800, 0, 480, 489, 492, 525, 0,
+		   DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_NVSYNC) },
+	/* 800x600@60Hz */
+	{ DRM_MODE("800x600",
+		   DRM_MODE_TYPE_DRIVER | DRM_MODE_TYPE_PREFERRED,
+		   40000, 800, 840, 968, 1056, 0, 600, 601, 605, 628,
+		   0, DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_PVSYNC) },
+	/* 1024x768@60Hz */
+	{ DRM_MODE("1024x768", DRM_MODE_TYPE_DRIVER, 65000, 1024, 1048,
+		   1184, 1344, 0, 768, 771, 777, 806, 0,
+		   DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_NVSYNC) },
+	/* 1152x864@75Hz */
+	{ DRM_MODE("1152x864", DRM_MODE_TYPE_DRIVER, 108000, 1152, 1216,
+		   1344, 1600, 0, 864, 865, 868, 900, 0,
+		   DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_PVSYNC) },
+	/* 1280x768@60Hz */
+	{ DRM_MODE("1280x768", DRM_MODE_TYPE_DRIVER, 79500, 1280, 1344,
+		   1472, 1664, 0, 768, 771, 778, 798, 0,
+		   DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_PVSYNC) },
+	/* 1280x800@60Hz */
+	{ DRM_MODE("1280x800", DRM_MODE_TYPE_DRIVER, 83500, 1280, 1352,
+		   1480, 1680, 0, 800, 803, 809, 831, 0,
+		   DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_NVSYNC) },
+	/* 1280x960@60Hz */
+	{ DRM_MODE("1280x960", DRM_MODE_TYPE_DRIVER, 108000, 1280, 1376,
+		   1488, 1800, 0, 960, 961, 964, 1000, 0,
+		   DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_PVSYNC) },
+	/* 1280x1024@60Hz */
+	{ DRM_MODE("1280x1024", DRM_MODE_TYPE_DRIVER, 108000, 1280, 1328,
+		   1440, 1688, 0, 1024, 1025, 1028, 1066, 0,
+		   DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_PVSYNC) },
+	/* 1360x768@60Hz */
+	{ DRM_MODE("1360x768", DRM_MODE_TYPE_DRIVER, 85500, 1360, 1424,
+		   1536, 1792, 0, 768, 771, 777, 795, 0,
+		   DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_PVSYNC) },
+	/* 1440x1050@60Hz */
+	{ DRM_MODE("1400x1050", DRM_MODE_TYPE_DRIVER, 121750, 1400, 1488,
+		   1632, 1864, 0, 1050, 1053, 1057, 1089, 0,
+		   DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_PVSYNC) },
+	/* 1440x900@60Hz */
+	{ DRM_MODE("1440x900", DRM_MODE_TYPE_DRIVER, 106500, 1440, 1520,
+		   1672, 1904, 0, 900, 903, 909, 934, 0,
+		   DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_PVSYNC) },
+	/* 1600x1200@60Hz */
+	{ DRM_MODE("1600x1200", DRM_MODE_TYPE_DRIVER, 162000, 1600, 1664,
+		   1856, 2160, 0, 1200, 1201, 1204, 1250, 0,
+		   DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_PVSYNC) },
+	/* 1680x1050@60Hz */
+	{ DRM_MODE("1680x1050", DRM_MODE_TYPE_DRIVER, 146250, 1680, 1784,
+		   1960, 2240, 0, 1050, 1053, 1059, 1089, 0,
+		   DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_PVSYNC) },
+	/* 1792x1344@60Hz */
+	{ DRM_MODE("1792x1344", DRM_MODE_TYPE_DRIVER, 204750, 1792, 1920,
+		   2120, 2448, 0, 1344, 1345, 1348, 1394, 0,
+		   DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_PVSYNC) },
+	/* 1853x1392@60Hz */
+	{ DRM_MODE("1856x1392", DRM_MODE_TYPE_DRIVER, 218250, 1856, 1952,
+		   2176, 2528, 0, 1392, 1393, 1396, 1439, 0,
+		   DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_PVSYNC) },
+	/* 1920x1200@60Hz */
+	{ DRM_MODE("1920x1200", DRM_MODE_TYPE_DRIVER, 193250, 1920, 2056,
+		   2256, 2592, 0, 1200, 1203, 1209, 1245, 0,
+		   DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_PVSYNC) },
+	/* 1920x1440@60Hz */
+	{ DRM_MODE("1920x1440", DRM_MODE_TYPE_DRIVER, 234000, 1920, 2048,
+		   2256, 2600, 0, 1440, 1441, 1444, 1500, 0,
+		   DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_PVSYNC) },
+	/* 2560x1600@60Hz */
+	{ DRM_MODE("2560x1600", DRM_MODE_TYPE_DRIVER, 348500, 2560, 2752,
+		   3032, 3504, 0, 1600, 1603, 1609, 1658, 0,
+		   DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_PVSYNC) },
+	/* Terminate */
+	{ DRM_MODE("", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) },
+};
+
 static int vmw_ldu_connector_fill_modes(struct drm_connector *connector,
 					uint32_t max_width, uint32_t max_height)
 {
 	struct drm_device *dev = connector->dev;
 	struct drm_display_mode *mode = NULL;
 	int i;
-	static struct drm_display_mode builtin[] = {
-		/* 640x480@60Hz */
-		{ DRM_MODE("640x480", DRM_MODE_TYPE_DRIVER, 25175, 640, 656,
-			   752, 800, 0, 480, 489, 492, 525, 0,
-			   DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_NVSYNC) },
-		/* 800x600@60Hz */
-		{ DRM_MODE("800x600",
-			   DRM_MODE_TYPE_DRIVER | DRM_MODE_TYPE_PREFERRED,
-			   40000, 800, 840, 968, 1056, 0, 600, 601, 605, 628,
-			   0, DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_PVSYNC) },
-		/* 1024x768@60Hz */
-		{ DRM_MODE("1024x768", DRM_MODE_TYPE_DRIVER, 65000, 1024, 1048,
-			   1184, 1344, 0, 768, 771, 777, 806, 0,
-			   DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_NVSYNC) },
-		/* 1152x864@75Hz */
-		{ DRM_MODE("1152x864", DRM_MODE_TYPE_DRIVER, 108000, 1152, 1216,
-			   1344, 1600, 0, 864, 865, 868, 900, 0,
-			   DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_PVSYNC) },
-		/* 1280x768@60Hz */
-		{ DRM_MODE("1280x768", DRM_MODE_TYPE_DRIVER, 79500, 1280, 1344,
-			   1472, 1664, 0, 768, 771, 778, 798, 0,
-			   DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_PVSYNC) },
-		/* 1280x800@60Hz */
-		{ DRM_MODE("1280x800", DRM_MODE_TYPE_DRIVER, 83500, 1280, 1352,
-			   1480, 1680, 0, 800, 803, 809, 831, 0,
-			   DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_NVSYNC) },
-		/* 1280x960@60Hz */
-		{ DRM_MODE("1280x960", DRM_MODE_TYPE_DRIVER, 108000, 1280, 1376,
-			   1488, 1800, 0, 960, 961, 964, 1000, 0,
-			   DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_PVSYNC) },
-		/* 1280x1024@60Hz */
-		{ DRM_MODE("1280x1024", DRM_MODE_TYPE_DRIVER, 108000, 1280, 1328,
-			   1440, 1688, 0, 1024, 1025, 1028, 1066, 0,
-			   DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_PVSYNC) },
-		/* 1360x768@60Hz */
-		{ DRM_MODE("1360x768", DRM_MODE_TYPE_DRIVER, 85500, 1360, 1424,
-			   1536, 1792, 0, 768, 771, 777, 795, 0,
-			   DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_PVSYNC) },
-		/* 1440x1050@60Hz */
-		{ DRM_MODE("1400x1050", DRM_MODE_TYPE_DRIVER, 121750, 1400, 1488,
-			   1632, 1864, 0, 1050, 1053, 1057, 1089, 0,
-			   DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_PVSYNC) },
-		/* 1440x900@60Hz */
-		{ DRM_MODE("1440x900", DRM_MODE_TYPE_DRIVER, 106500, 1440, 1520,
-			   1672, 1904, 0, 900, 903, 909, 934, 0,
-			   DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_PVSYNC) },
-		/* 1600x1200@60Hz */
-		{ DRM_MODE("1600x1200", DRM_MODE_TYPE_DRIVER, 162000, 1600, 1664,
-			   1856, 2160, 0, 1200, 1201, 1204, 1250, 0,
-			   DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_PVSYNC) },
-		/* 1680x1050@60Hz */
-		{ DRM_MODE("1680x1050", DRM_MODE_TYPE_DRIVER, 146250, 1680, 1784,
-			   1960, 2240, 0, 1050, 1053, 1059, 1089, 0,
-			   DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_PVSYNC) },
-		/* 1792x1344@60Hz */
-		{ DRM_MODE("1792x1344", DRM_MODE_TYPE_DRIVER, 204750, 1792, 1920,
-			   2120, 2448, 0, 1344, 1345, 1348, 1394, 0,
-			   DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_PVSYNC) },
-		/* 1853x1392@60Hz */
-		{ DRM_MODE("1856x1392", DRM_MODE_TYPE_DRIVER, 218250, 1856, 1952,
-			   2176, 2528, 0, 1392, 1393, 1396, 1439, 0,
-			   DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_PVSYNC) },
-		/* 1920x1200@60Hz */
-		{ DRM_MODE("1920x1200", DRM_MODE_TYPE_DRIVER, 193250, 1920, 2056,
-			   2256, 2592, 0, 1200, 1203, 1209, 1245, 0,
-			   DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_PVSYNC) },
-		/* 1920x1440@60Hz */
-		{ DRM_MODE("1920x1440", DRM_MODE_TYPE_DRIVER, 234000, 1920, 2048,
-			   2256, 2600, 0, 1440, 1441, 1444, 1500, 0,
-			   DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_PVSYNC) },
-#if 0
-		/* 2560x1600@60Hz */
-		{ DRM_MODE("2560x1600", DRM_MODE_TYPE_DRIVER, 348500, 2560, 2752,
-			   3032, 3504, 0, 1600, 1603, 1609, 1658, 0,
-			   DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_PVSYNC) },
-#endif
-		/* Terminate */
-		{ DRM_MODE("", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) },
-	};
 
+	for (i = 0; vmw_ldu_connector_builtin[i].type != 0; i++) {
+		if (vmw_ldu_connector_builtin[i].hdisplay > max_width ||
+		    vmw_ldu_connector_builtin[i].vdisplay > max_height)
+			continue;
 
-	for (i = 0; builtin[i].type != 0; i++) {
-		mode = drm_mode_duplicate(dev, &builtin[i]);
+		mode = drm_mode_duplicate(dev, &vmw_ldu_connector_builtin[i]);
 		if (!mode)
 			return 0;
 		mode->vrefresh = drm_mode_vrefresh(mode);
@@ -421,8 +421,7 @@ static void vmw_ldu_connector_destroy(struct drm_connector *connector)
 	vmw_ldu_destroy(vmw_connector_to_ldu(connector));
 }
 
-static struct drm_connector_funcs vmw_legacy_connector_funcs =
-{
+static struct drm_connector_funcs vmw_legacy_connector_funcs = {
 	.dpms = vmw_ldu_connector_dpms,
 	.save = vmw_ldu_connector_save,
 	.restore = vmw_ldu_connector_restore,
@@ -441,9 +440,8 @@ static int vmw_ldu_init(struct vmw_private *dev_priv, unsigned unit)
 	struct drm_crtc *crtc;
 
 	ldu = kzalloc(sizeof(*ldu), GFP_KERNEL);
-	if (!ldu) {
+	if (!ldu)
 		return -ENOMEM;
-	}
 
 	ldu->unit = unit;
 	crtc = &ldu->base.crtc;

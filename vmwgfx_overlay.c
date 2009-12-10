@@ -36,8 +36,7 @@
 
 #define VMW_MAX_NUM_STREAMS 1
 
-struct vmw_stream
-{
+struct vmw_stream {
 	struct vmw_dma_buffer *buf;
 	bool paused;
 	struct drm_vmw_overlay_arg saved;
@@ -46,15 +45,14 @@ struct vmw_stream
 /**
  * Overlay control
  */
-struct vmw_overlay
-{
+struct vmw_overlay {
 	/*
 	 * Each stream is a single overlay. In Xv these are called ports.
 	 */
 	struct vmw_stream stream[VMW_MAX_NUM_STREAMS];
 };
 
-static inline struct vmw_overlay * vmw_overlay(struct drm_device *dev)
+static inline struct vmw_overlay *vmw_overlay(struct drm_device *dev)
 {
 	struct vmw_private *dev_priv = vmw_priv(dev);
 	return dev_priv ? dev_priv->overlay_priv : NULL;
@@ -150,9 +148,8 @@ static int vmw_overlay_send_put(struct vmw_private *dev_priv,
 	cmds->body.header.cmdType = SVGA_ESCAPE_VMWARE_VIDEO_SET_REGS;
 	cmds->body.header.streamId = arg->stream_id;
 
-	for (i = 0; i <= SVGA_VIDEO_PITCH_3; i++) {
+	for (i = 0; i <= SVGA_VIDEO_PITCH_3; i++)
 		cmds->body.items[i].registerId = i;
-	}
 
 	offset = buf->base.offset + arg->offset;
 
@@ -202,7 +199,7 @@ static int vmw_overlay_send_stop(struct vmw_private *dev_priv,
 	fill_flush(&cmds->flush, stream_id);
 
 	vmw_fifo_commit(dev_priv, sizeof(*cmds));
-	
+
 	return 0;
 }
 
@@ -266,7 +263,9 @@ static int vmw_overlay_update_stream(struct vmw_private *dev_priv,
 		if (ret)
 			return ret;
 	} else if (!stream->paused) {
-		/* If the buffers match and not paused then just send the put. */
+		/* If the buffers match and not paused then just send
+		 * the put command, no need to do anything else.
+		 */
 		ret = vmw_overlay_send_put(dev_priv, buf, arg);
 		if (ret == 0)
 			stream->saved = *arg;

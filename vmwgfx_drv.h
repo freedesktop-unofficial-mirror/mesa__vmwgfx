@@ -115,7 +115,7 @@ struct vmw_fifo_state {
 	unsigned long static_buffer_size;
 	bool using_bounce_buffer;
 	uint32_t capabilities;
-        struct rw_semaphore rwsem;
+	struct rw_semaphore rwsem;
 };
 
 struct vmw_relocation {
@@ -372,7 +372,7 @@ extern int vmw_fifo_debug_ioctl(struct drm_device *dev, void *data,
  * Fifo utilities - vmwgfx_fifo.c
  */
 
-extern int vmw_fifo_init(struct vmw_private *dev_priv, 
+extern int vmw_fifo_init(struct vmw_private *dev_priv,
 			 struct vmw_fifo_state *fifo);
 extern void vmw_fifo_release(struct vmw_private *dev_priv,
 			     struct vmw_fifo_state *fifo);

@@ -696,7 +696,8 @@ int vmw_surface_reference_ioctl(struct drm_device *dev, void *data,
 		ret = copy_to_user(user_sizes, srf->sizes,
 				   srf->num_sizes * sizeof(*srf->sizes));
 	if (unlikely(ret != 0)) {
-		DRM_ERROR("copy_to_user failed %p %u\n", user_sizes, srf->num_sizes);
+		DRM_ERROR("copy_to_user failed %p %u\n",
+			  user_sizes, srf->num_sizes);
 		/**
 		 * FIXME: Unreference surface here?
 		 */
@@ -856,9 +857,8 @@ int vmw_dmabuf_alloc_ioctl(struct drm_device *dev, void *data,
 	int ret;
 
 	vmw_user_bo = kzalloc(sizeof(*vmw_user_bo), GFP_KERNEL);
-	if (unlikely(vmw_user_bo == NULL)) {
+	if (unlikely(vmw_user_bo == NULL))
 		return -ENOMEM;
-	}
 
 	ret = ttm_read_lock(&vmaster->lock, true);
 	if (unlikely(ret != 0)) {

@@ -128,9 +128,9 @@ static struct drm_ioctl_desc vmw_ioctls[] = {
 		      vmw_kms_cursor_bypass_ioctl, 0)
 };
 
-static struct pci_device_id vmw_pci_id_list[] =
-    { {0x15ad, 0x0405, PCI_ANY_ID, PCI_ANY_ID, 0, 0, VMWGFX_CHIP_SVGAII},
-{0, 0, 0}
+static struct pci_device_id vmw_pci_id_list[] = {
+	{0x15ad, 0x0405, PCI_ANY_ID, PCI_ANY_ID, 0, 0, VMWGFX_CHIP_SVGAII},
+	{0, 0, 0}
 };
 
 static char *vmw_devname = "vmwgfx";
@@ -227,7 +227,7 @@ static int vmw_driver_load(struct drm_device *dev, unsigned long chipset)
 	mutex_lock(&dev_priv->hw_mutex);
 	dev_priv->capabilities = vmw_read(dev_priv, SVGA_REG_CAPABILITIES);
 
-	dev_priv->max_gmr_descriptors = 
+	dev_priv->max_gmr_descriptors =
 		vmw_read(dev_priv, SVGA_REG_GMR_MAX_DESCRIPTOR_LENGTH);
 	dev_priv->max_gmr_ids =
 		vmw_read(dev_priv, SVGA_REG_GMR_MAX_IDS);
@@ -294,7 +294,7 @@ static int vmw_driver_load(struct drm_device *dev, unsigned long chipset)
 		DRM_ERROR("Failed mapping MMIO.\n");
 		goto out_err3;
 	}
-		
+
 	dev_priv->tdev = ttm_object_device_init
 	    (dev_priv->mem_global_ref.object, 12);
 
@@ -626,10 +626,8 @@ static void vmw_master_drop(struct drm_device *dev,
 
 	if (dev_priv->stealth) {
 		ret = ttm_bo_evict_mm(&dev_priv->bdev, TTM_PL_VRAM);
-		if (unlikely(ret != 0)) {
-			    DRM_ERROR("Unable to clean VRAM on "
-				      "master drop.\n");
-		}
+		if (unlikely(ret != 0))
+			DRM_ERROR("Unable to clean VRAM on master drop.\n");
 		vmw_release_device(dev_priv);
 	}
 	dev_priv->active_master = &dev_priv->fbdev_master;
