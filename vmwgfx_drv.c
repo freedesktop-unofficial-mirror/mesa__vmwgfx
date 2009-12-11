@@ -41,15 +41,9 @@
  * Fully encoded drm commands. Might move to vmw_drm.h
  */
 
-#define DRM_IOCTL_VMW_VT					\
-	DRM_IOW(DRM_COMMAND_BASE + DRM_VMW_VT,			\
-		struct drm_vmw_vt_arg)
 #define DRM_IOCTL_VMW_GET_PARAM					\
 	DRM_IOWR(DRM_COMMAND_BASE + DRM_VMW_GET_PARAM,		\
 		 struct drm_vmw_getparam_arg)
-#define DRM_IOCTL_VMW_EXTENSION					\
-	DRM_IOWR(DRM_COMMAND_BASE + DRM_VMW_EXTENSION,		\
-		 union drm_vmw_extension_arg)
 #define DRM_IOCTL_VMW_CREATE_CONTEXT				\
 	DRM_IOR(DRM_COMMAND_BASE + DRM_VMW_CREATE_CONTEXT,	\
 		struct drm_vmw_context_arg)
