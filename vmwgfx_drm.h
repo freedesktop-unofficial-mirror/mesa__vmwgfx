@@ -61,6 +61,7 @@
 
 #define DRM_VMW_PARAM_FIFO_OFFSET    0
 #define DRM_VMW_PARAM_OVERLAY_IOCTL  1
+#define DRM_VMW_PARAM_3D             2
 
 /**
  * struct drm_vmw_getparam_arg
