@@ -44,6 +44,26 @@
 #define DRM_IOCTL_VMW_GET_PARAM					\
 	DRM_IOWR(DRM_COMMAND_BASE + DRM_VMW_GET_PARAM,		\
 		 struct drm_vmw_getparam_arg)
+#define DRM_IOCTL_VMW_ALLOC_DMABUF				\
+	DRM_IOWR(DRM_COMMAND_BASE + DRM_VMW_ALLOC_DMABUF,	\
+		union drm_vmw_alloc_dmabuf_arg)
+#define DRM_IOCTL_VMW_UNREF_DMABUF				\
+	DRM_IOW(DRM_COMMAND_BASE + DRM_VMW_UNREF_DMABUF,	\
+		struct drm_vmw_unref_dmabuf_arg)
+#define DRM_IOCTL_VMW_CURSOR_BYPASS				\
+	DRM_IOW(DRM_COMMAND_BASE + DRM_VMW_CURSOR_BYPASS,	\
+		 struct drm_vmw_cursor_bypass_arg)
+
+#define DRM_IOCTL_VMW_CONTROL_STREAM				\
+	DRM_IOW(DRM_COMMAND_BASE + DRM_VMW_CONTROL_STREAM,	\
+		 struct drm_vmw_control_stream_arg)
+#define DRM_IOCTL_VMW_CLAIM_STREAM				\
+	DRM_IOR(DRM_COMMAND_BASE + DRM_VMW_CLAIM_STREAM,	\
+		 struct drm_vmw_stream_arg)
+#define DRM_IOCTL_VMW_UNREF_STREAM				\
+	DRM_IOW(DRM_COMMAND_BASE + DRM_VMW_UNREF_STREAM,	\
+		 struct drm_vmw_stream_arg)
+
 #define DRM_IOCTL_VMW_CREATE_CONTEXT				\
 	DRM_IOR(DRM_COMMAND_BASE + DRM_VMW_CREATE_CONTEXT,	\
 		struct drm_vmw_context_arg)
@@ -62,30 +82,13 @@
 #define DRM_IOCTL_VMW_EXECBUF					\
 	DRM_IOW(DRM_COMMAND_BASE + DRM_VMW_EXECBUF,		\
 		struct drm_vmw_execbuf_arg)
-#define DRM_IOCTL_VMW_ALLOC_DMABUF				\
-	DRM_IOWR(DRM_COMMAND_BASE + DRM_VMW_ALLOC_DMABUF,	\
-		union drm_vmw_alloc_dmabuf_arg)
-#define DRM_IOCTL_VMW_UNREF_DMABUF				\
-	DRM_IOW(DRM_COMMAND_BASE + DRM_VMW_UNREF_DMABUF,	\
-		struct drm_vmw_unref_dmabuf_arg)
 #define DRM_IOCTL_VMW_FIFO_DEBUG				\
 	DRM_IOWR(DRM_COMMAND_BASE + DRM_VMW_FIFO_DEBUG,		\
 		 struct drm_vmw_fifo_debug_arg)
 #define DRM_IOCTL_VMW_FENCE_WAIT				\
 	DRM_IOWR(DRM_COMMAND_BASE + DRM_VMW_FENCE_WAIT,		\
 		 struct drm_vmw_fence_wait_arg)
-#define DRM_IOCTL_VMW_OVERLAY					\
-	DRM_IOW(DRM_COMMAND_BASE + DRM_VMW_OVERLAY,		\
-		 struct drm_vmw_overlay_arg)
-#define DRM_IOCTL_VMW_CURSOR_BYPASS				\
-	DRM_IOW(DRM_COMMAND_BASE + DRM_VMW_CURSOR_BYPASS,	\
-		 struct drm_vmw_cursor_bypass_arg)
-#define DRM_IOCTL_VMW_CLAIM_STREAM				\
-	DRM_IOR(DRM_COMMAND_BASE + DRM_VMW_CLAIM_STREAM,	\
-		 struct drm_vmw_stream_arg)
-#define DRM_IOCTL_VMW_UNREF_STREAM				\
-	DRM_IOW(DRM_COMMAND_BASE + DRM_VMW_UNREF_STREAM,	\
-		 struct drm_vmw_stream_arg)
+
 
 /**
  * The core DRM version of this macro doesn't account for
@@ -101,6 +104,20 @@
 
 static struct drm_ioctl_desc vmw_ioctls[] = {
 	VMW_IOCTL_DEF(DRM_IOCTL_VMW_GET_PARAM, vmw_getparam_ioctl, 0),
+	VMW_IOCTL_DEF(DRM_IOCTL_VMW_ALLOC_DMABUF, vmw_dmabuf_alloc_ioctl,
+		      0),
+	VMW_IOCTL_DEF(DRM_IOCTL_VMW_UNREF_DMABUF, vmw_dmabuf_unref_ioctl,
+		      0),
+	VMW_IOCTL_DEF(DRM_IOCTL_VMW_CURSOR_BYPASS,
+		      vmw_kms_cursor_bypass_ioctl, 0),
+
+	VMW_IOCTL_DEF(DRM_IOCTL_VMW_CONTROL_STREAM, vmw_overlay_ioctl,
+		      0),
+	VMW_IOCTL_DEF(DRM_IOCTL_VMW_CLAIM_STREAM, vmw_stream_claim_ioctl,
+		      0),
+	VMW_IOCTL_DEF(DRM_IOCTL_VMW_UNREF_STREAM, vmw_stream_unref_ioctl,
+		      0),
+
 	VMW_IOCTL_DEF(DRM_IOCTL_VMW_CREATE_CONTEXT, vmw_context_define_ioctl,
 		      0),
 	VMW_IOCTL_DEF(DRM_IOCTL_VMW_UNREF_CONTEXT, vmw_context_destroy_ioctl,
@@ -113,21 +130,9 @@ static struct drm_ioctl_desc vmw_ioctls[] = {
 		      0),
 	VMW_IOCTL_DEF(DRM_IOCTL_VMW_EXECBUF, vmw_execbuf_ioctl,
 		      0),
-	VMW_IOCTL_DEF(DRM_IOCTL_VMW_ALLOC_DMABUF, vmw_dmabuf_alloc_ioctl,
-		      0),
-	VMW_IOCTL_DEF(DRM_IOCTL_VMW_UNREF_DMABUF, vmw_dmabuf_unref_ioctl,
-		      0),
 	VMW_IOCTL_DEF(DRM_IOCTL_VMW_FIFO_DEBUG, vmw_fifo_debug_ioctl,
 		      0),
 	VMW_IOCTL_DEF(DRM_IOCTL_VMW_FENCE_WAIT, vmw_fence_wait_ioctl,
-		      0),
-	VMW_IOCTL_DEF(DRM_IOCTL_VMW_OVERLAY, vmw_overlay_ioctl,
-		      0),
-	VMW_IOCTL_DEF(DRM_IOCTL_VMW_CURSOR_BYPASS,
-		      vmw_kms_cursor_bypass_ioctl, 0),
-	VMW_IOCTL_DEF(DRM_IOCTL_VMW_CLAIM_STREAM, vmw_stream_claim_ioctl,
-		      0),
-	VMW_IOCTL_DEF(DRM_IOCTL_VMW_UNREF_STREAM, vmw_stream_unref_ioctl,
 		      0)
 };
 

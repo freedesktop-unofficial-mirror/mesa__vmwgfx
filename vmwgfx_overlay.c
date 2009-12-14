@@ -40,7 +40,7 @@ struct vmw_stream {
 	struct vmw_dma_buffer *buf;
 	bool claimed;
 	bool paused;
-	struct drm_vmw_overlay_arg saved;
+	struct drm_vmw_control_stream_arg saved;
 };
 
 /**
@@ -147,7 +147,7 @@ err:
  */
 static int vmw_overlay_send_put(struct vmw_private *dev_priv,
 				struct vmw_dma_buffer *buf,
-				struct drm_vmw_overlay_arg *arg,
+				struct drm_vmw_control_stream_arg *arg,
 				bool interruptible)
 {
 	struct {
@@ -319,7 +319,7 @@ static int vmw_overlay_stop(struct vmw_private *dev_priv,
  */
 static int vmw_overlay_update_stream(struct vmw_private *dev_priv,
 				     struct vmw_dma_buffer *buf,
-				     struct drm_vmw_overlay_arg *arg,
+				     struct drm_vmw_control_stream_arg *arg,
 				     bool interruptible)
 {
 	struct vmw_overlay *overlay = dev_priv->overlay_priv;
@@ -474,8 +474,8 @@ int vmw_overlay_ioctl(struct drm_device *dev, void *data,
 	struct ttm_object_file *tfile = vmw_fpriv(file_priv)->tfile;
 	struct vmw_private *dev_priv = vmw_priv(dev);
 	struct vmw_overlay *overlay = dev_priv->overlay_priv;
-	struct drm_vmw_overlay_arg *arg =
-	    (struct drm_vmw_overlay_arg *)data;
+	struct drm_vmw_control_stream_arg *arg =
+	    (struct drm_vmw_control_stream_arg *)data;
 	struct vmw_dma_buffer *buf;
 	struct vmw_resource *res;
 	int ret;
