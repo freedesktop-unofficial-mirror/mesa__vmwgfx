@@ -509,6 +509,33 @@ out_unlock:
 	return ret;
 }
 
+int vmw_overlay_num_overlays(struct vmw_private *dev_priv)
+{
+	if (!dev_priv->overlay_priv)
+		return 0;
+
+	return VMW_MAX_NUM_STREAMS;
+}
+
+int vmw_overlay_num_free_overlays(struct vmw_private *dev_priv)
+{
+	struct vmw_overlay *overlay = dev_priv->overlay_priv;
+	int i, k;
+
+	if (!overlay)
+		return 0;
+
+	mutex_lock(&overlay->mutex);
+
+	for (i = 0, k = 0; i < VMW_MAX_NUM_STREAMS; i++)
+		if (!overlay->stream[i].claimed)
+			k++;
+
+	mutex_unlock(&overlay->mutex);
+
+	return k;
+}
+
 int vmw_overlay_claim(struct vmw_private *dev_priv, uint32_t *out)
 {
 	struct vmw_overlay *overlay = dev_priv->overlay_priv;

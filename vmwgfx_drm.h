@@ -61,9 +61,11 @@
  * Does the driver support the overlay ioctl.
  */
 
-#define DRM_VMW_PARAM_FIFO_OFFSET    0
-#define DRM_VMW_PARAM_OVERLAY_IOCTL  1
-#define DRM_VMW_PARAM_3D             2
+#define DRM_VMW_PARAM_FIFO_OFFSET      0
+#define DRM_VMW_PARAM_OVERLAY_IOCTL    1
+#define DRM_VMW_PARAM_3D               2
+#define DRM_VMW_PARAM_NUM_STREAMS      3
+#define DRM_VMW_PARAM_NUM_FREE_STREAMS 4
 
 /**
  * struct drm_vmw_getparam_arg

@@ -40,10 +40,16 @@ int vmw_getparam_ioctl(struct drm_device *dev, void *data,
 		param->value = dev_priv->mmio_start;
 		break;
 	case DRM_VMW_PARAM_OVERLAY_IOCTL:
-		param->value = dev_priv->overlay_priv ? 1 : 0;
+		param->value = 0;
 		break;
 	case DRM_VMW_PARAM_3D:
 		param->value = dev_priv->capabilities & SVGA_CAP_3D ? 1 : 0;
+		break;
+	case DRM_VMW_PARAM_NUM_STREAMS:
+		param->value = vmw_overlay_num_overlays(dev_priv);
+		break;
+	case DRM_VMW_PARAM_NUM_FREE_STREAMS:
+		param->value = vmw_overlay_num_free_overlays(dev_priv);
 		break;
 	default:
 		DRM_ERROR("Illegal vmwgfx get param request: %d\n",

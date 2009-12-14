@@ -472,6 +472,8 @@ int vmw_overlay_resume_all(struct vmw_private *dev_priv);
 int vmw_overlay_pause_all(struct vmw_private *dev_priv);
 int vmw_overlay_claim(struct vmw_private *dev_priv, uint32_t *out);
 int vmw_overlay_unref(struct vmw_private *dev_priv, uint32_t stream_id);
+int vmw_overlay_num_overlays(struct vmw_private *dev_priv);
+int vmw_overlay_num_free_overlays(struct vmw_private *dev_priv);
 
 /**
  * Inline helper functions
