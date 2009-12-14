@@ -33,6 +33,7 @@
 
 #define VMW_RES_CONTEXT ttm_driver_type0
 #define VMW_RES_SURFACE ttm_driver_type1
+#define VMW_RES_STREAM ttm_driver_type2
 
 struct vmw_user_context {
 	struct ttm_base_object base;
@@ -52,6 +53,16 @@ struct vmw_user_dma_buffer {
 struct vmw_bo_user_rep {
 	uint32_t handle;
 	uint64_t map_handle;
+};
+
+struct vmw_stream {
+	struct vmw_resource res;
+	uint32_t stream_id;
+};
+
+struct vmw_user_stream {
+	struct ttm_base_object base;
+	struct vmw_stream stream;
 };
 
 static inline struct vmw_dma_buffer *
@@ -1004,4 +1015,178 @@ int vmw_gmr_id_alloc(struct vmw_private *dev_priv, uint32_t *p_id)
 
 	*p_id = (uint32_t) id;
 	return 0;
+}
+
+/*
+ * Stream managment
+ */
+
+static void vmw_stream_destroy(struct vmw_resource *res)
+{
+	struct vmw_private *dev_priv = res->dev_priv;
+	struct vmw_stream *stream;
+	int ret;
+
+	DRM_INFO("%s: unref\n", __func__);
+	stream = container_of(res, struct vmw_stream, res);
+
+	ret = vmw_overlay_unref(dev_priv, stream->stream_id);
+	WARN_ON(ret != 0);
+}
+
+static int vmw_stream_init(struct vmw_private *dev_priv,
+			   struct vmw_stream *stream,
+			   void (*res_free) (struct vmw_resource *res))
+{
+	struct vmw_resource *res = &stream->res;
+	int ret;
+
+	ret = vmw_resource_init(dev_priv, res, &dev_priv->stream_idr,
+				VMW_RES_STREAM, res_free);
+
+	if (unlikely(ret != 0)) {
+		if (res_free == NULL)
+			kfree(stream);
+		else
+			res_free(&stream->res);
+		return ret;
+	}
+
+	ret = vmw_overlay_claim(dev_priv, &stream->stream_id);
+	if (ret) {
+		vmw_resource_unreference(&res);
+		return ret;
+	}
+
+	DRM_INFO("%s: claimed\n", __func__);
+
+	vmw_resource_activate(&stream->res, vmw_stream_destroy);
+	return 0;
+}
+
+/**
+ * User-space context management:
+ */
+
+static void vmw_user_stream_free(struct vmw_resource *res)
+{
+	struct vmw_user_stream *stream =
+	    container_of(res, struct vmw_user_stream, stream.res);
+
+	kfree(stream);
+}
+
+/**
+ * This function is called when user space has no more references on the
+ * base object. It releases the base-object's reference on the resource object.
+ */
+
+static void vmw_user_stream_base_release(struct ttm_base_object **p_base)
+{
+	struct ttm_base_object *base = *p_base;
+	struct vmw_user_stream *stream =
+	    container_of(base, struct vmw_user_stream, base);
+	struct vmw_resource *res = &stream->stream.res;
+
+	*p_base = NULL;
+	vmw_resource_unreference(&res);
+}
+
+int vmw_stream_unref_ioctl(struct drm_device *dev, void *data,
+			   struct drm_file *file_priv)
+{
+	struct vmw_private *dev_priv = vmw_priv(dev);
+	struct vmw_resource *res;
+	struct vmw_user_stream *stream;
+	struct drm_vmw_stream_arg *arg = (struct drm_vmw_stream_arg *)data;
+	struct ttm_object_file *tfile = vmw_fpriv(file_priv)->tfile;
+	int ret = 0;
+
+	res = vmw_resource_lookup(dev_priv, &dev_priv->stream_idr, arg->stream_id);
+	if (unlikely(res == NULL))
+		return -EINVAL;
+
+	if (res->res_free != &vmw_user_stream_free) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	stream = container_of(res, struct vmw_user_stream, stream.res);
+	if (stream->base.tfile != tfile) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	ttm_ref_object_base_unref(tfile, stream->base.hash.key, TTM_REF_USAGE);
+out:
+	vmw_resource_unreference(&res);
+	return ret;
+}
+
+int vmw_stream_claim_ioctl(struct drm_device *dev, void *data,
+			   struct drm_file *file_priv)
+{
+	struct vmw_private *dev_priv = vmw_priv(dev);
+	struct vmw_user_stream *stream = kmalloc(sizeof(*stream), GFP_KERNEL);
+	struct vmw_resource *res;
+	struct vmw_resource *tmp;
+	struct drm_vmw_stream_arg *arg = (struct drm_vmw_stream_arg *)data;
+	struct ttm_object_file *tfile = vmw_fpriv(file_priv)->tfile;
+	int ret;
+
+	if (unlikely(stream == NULL))
+		return -ENOMEM;
+
+	res = &stream->stream.res;
+	stream->base.shareable = false;
+	stream->base.tfile = NULL;
+
+	ret = vmw_stream_init(dev_priv, &stream->stream, vmw_user_stream_free);
+	if (unlikely(ret != 0))
+		return ret;
+
+	tmp = vmw_resource_reference(res);
+	ret = ttm_base_object_init(tfile, &stream->base, false, VMW_RES_STREAM,
+				   &vmw_user_stream_base_release, NULL);
+
+	if (unlikely(ret != 0)) {
+		vmw_resource_unreference(&tmp);
+		goto out_err;
+	}
+
+	arg->stream_id = res->id;
+out_err:
+	vmw_resource_unreference(&res);
+	return ret;
+}
+
+int vmw_user_stream_lookup(struct vmw_private *dev_priv,
+			   struct ttm_object_file *tfile,
+			   uint32_t *inout_id, struct vmw_resource **out)
+{
+	struct vmw_user_stream *stream;
+	struct vmw_resource *res;
+	int ret;
+
+	res = vmw_resource_lookup(dev_priv, &dev_priv->stream_idr, *inout_id);
+	if (unlikely(res == NULL))
+		return -EINVAL;
+
+	if (res->res_free != &vmw_user_stream_free) {
+		ret = -EINVAL;
+		goto err_ref;
+	}
+
+	stream = container_of(res, struct vmw_user_stream, stream.res);
+	if (stream->base.tfile != tfile) {
+		ret = -EPERM;
+		goto err_ref;
+	}
+
+	*inout_id = stream->stream.stream_id;
+	*out = res;
+	return 0;
+err_ref:
+	vmw_resource_unreference(&res);
+	return ret;
 }

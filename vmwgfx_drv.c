@@ -80,6 +80,12 @@
 #define DRM_IOCTL_VMW_CURSOR_BYPASS				\
 	DRM_IOW(DRM_COMMAND_BASE + DRM_VMW_CURSOR_BYPASS,	\
 		 struct drm_vmw_cursor_bypass_arg)
+#define DRM_IOCTL_VMW_CLAIM_STREAM				\
+	DRM_IOR(DRM_COMMAND_BASE + DRM_VMW_CLAIM_STREAM,	\
+		 struct drm_vmw_stream_arg)
+#define DRM_IOCTL_VMW_UNREF_STREAM				\
+	DRM_IOW(DRM_COMMAND_BASE + DRM_VMW_UNREF_STREAM,	\
+		 struct drm_vmw_stream_arg)
 
 /**
  * The core DRM version of this macro doesn't account for
@@ -118,7 +124,11 @@ static struct drm_ioctl_desc vmw_ioctls[] = {
 	VMW_IOCTL_DEF(DRM_IOCTL_VMW_OVERLAY, vmw_overlay_ioctl,
 		      0),
 	VMW_IOCTL_DEF(DRM_IOCTL_VMW_CURSOR_BYPASS,
-		      vmw_kms_cursor_bypass_ioctl, 0)
+		      vmw_kms_cursor_bypass_ioctl, 0),
+	VMW_IOCTL_DEF(DRM_IOCTL_VMW_CLAIM_STREAM, vmw_stream_claim_ioctl,
+		      0),
+	VMW_IOCTL_DEF(DRM_IOCTL_VMW_UNREF_STREAM, vmw_stream_unref_ioctl,
+		      0)
 };
 
 static struct pci_device_id vmw_pci_id_list[] = {
@@ -205,6 +215,7 @@ static int vmw_driver_load(struct drm_device *dev, unsigned long chipset)
 	rwlock_init(&dev_priv->resource_lock);
 	idr_init(&dev_priv->context_idr);
 	idr_init(&dev_priv->surface_idr);
+	idr_init(&dev_priv->stream_idr);
 	ida_init(&dev_priv->gmr_ida);
 	mutex_init(&dev_priv->init_mutex);
 	init_waitqueue_head(&dev_priv->fence_queue);
@@ -363,6 +374,7 @@ out_err0:
 	ida_destroy(&dev_priv->gmr_ida);
 	idr_destroy(&dev_priv->surface_idr);
 	idr_destroy(&dev_priv->context_idr);
+	idr_destroy(&dev_priv->stream_idr);
 	kfree(dev_priv);
 	return ret;
 }
@@ -398,6 +410,7 @@ static int vmw_driver_unload(struct drm_device *dev)
 	ida_destroy(&dev_priv->gmr_ida);
 	idr_destroy(&dev_priv->surface_idr);
 	idr_destroy(&dev_priv->context_idr);
+	idr_destroy(&dev_priv->stream_idr);
 
 	kfree(dev_priv);
 

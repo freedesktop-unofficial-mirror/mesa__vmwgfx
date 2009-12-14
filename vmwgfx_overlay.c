@@ -38,6 +38,7 @@
 
 struct vmw_stream {
 	struct vmw_dma_buffer *buf;
+	bool claimed;
 	bool paused;
 	struct drm_vmw_overlay_arg saved;
 };
@@ -476,13 +477,15 @@ int vmw_overlay_ioctl(struct drm_device *dev, void *data,
 	struct drm_vmw_overlay_arg *arg =
 	    (struct drm_vmw_overlay_arg *)data;
 	struct vmw_dma_buffer *buf;
+	struct vmw_resource *res;
 	int ret;
-
-	if (arg->stream_id > VMW_MAX_NUM_STREAMS)
-		return -EINVAL;
 
 	if (!overlay)
 		return -ENOSYS;
+
+	ret = vmw_user_stream_lookup(dev_priv, tfile, &arg->stream_id, &res);
+	if (ret)
+		return ret;
 
 	mutex_lock(&overlay->mutex);
 
@@ -501,8 +504,53 @@ int vmw_overlay_ioctl(struct drm_device *dev, void *data,
 
 out_unlock:
 	mutex_unlock(&overlay->mutex);
+	vmw_resource_unreference(&res);
 
 	return ret;
+}
+
+int vmw_overlay_claim(struct vmw_private *dev_priv, uint32_t *out)
+{
+	struct vmw_overlay *overlay = dev_priv->overlay_priv;
+	int i;
+
+	if (!overlay)
+		return -ENOSYS;
+
+	mutex_lock(&overlay->mutex);
+
+	for (i = 0; i < VMW_MAX_NUM_STREAMS; i++) {
+
+		if (overlay->stream[i].claimed)
+			continue;
+
+		overlay->stream[i].claimed = true;
+		*out = i;
+		mutex_unlock(&overlay->mutex);
+		return 0;
+	}
+
+	mutex_unlock(&overlay->mutex);
+	return -ESRCH;
+}
+
+int vmw_overlay_unref(struct vmw_private *dev_priv, uint32_t stream_id)
+{
+	struct vmw_overlay *overlay = dev_priv->overlay_priv;
+
+	BUG_ON(stream_id >= VMW_MAX_NUM_STREAMS);
+
+	if (!overlay)
+		return -ENOSYS;
+
+	mutex_lock(&overlay->mutex);
+
+	WARN_ON(!overlay->stream[stream_id].claimed);
+	vmw_overlay_stop(dev_priv, stream_id, false, false);
+	overlay->stream[stream_id].claimed = false;
+
+	mutex_unlock(&overlay->mutex);
+	return 0;
 }
 
 int vmw_overlay_init(struct vmw_private *dev_priv)
@@ -528,6 +576,7 @@ int vmw_overlay_init(struct vmw_private *dev_priv)
 	for (i = 0; i < VMW_MAX_NUM_STREAMS; i++) {
 		overlay->stream[i].buf = NULL;
 		overlay->stream[i].paused = false;
+		overlay->stream[i].claimed = false;
 	}
 
 	dev_priv->overlay_priv = overlay;

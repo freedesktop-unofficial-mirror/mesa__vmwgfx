@@ -195,6 +195,7 @@ struct vmw_private {
 	rwlock_t resource_lock;
 	struct idr context_idr;
 	struct idr surface_idr;
+	struct idr stream_idr;
 
 	/*
 	 * Block lastclose from racing with firstopen.
@@ -355,6 +356,14 @@ extern int vmw_dmabuf_to_start_of_vram(struct vmw_private *vmw_priv,
 				       struct vmw_dma_buffer *bo);
 extern int vmw_dmabuf_from_vram(struct vmw_private *vmw_priv,
 				struct vmw_dma_buffer *bo);
+extern int vmw_stream_claim_ioctl(struct drm_device *dev, void *data,
+				  struct drm_file *file_priv);
+extern int vmw_stream_unref_ioctl(struct drm_device *dev, void *data,
+				  struct drm_file *file_priv);
+extern int vmw_user_stream_lookup(struct vmw_private *dev_priv,
+				  struct ttm_object_file *tfile,
+				  uint32_t *inout_id,
+				  struct vmw_resource **out);
 
 
 /**
@@ -461,6 +470,8 @@ int vmw_overlay_ioctl(struct drm_device *dev, void *data,
 int vmw_overlay_stop_all(struct vmw_private *dev_priv);
 int vmw_overlay_resume_all(struct vmw_private *dev_priv);
 int vmw_overlay_pause_all(struct vmw_private *dev_priv);
+int vmw_overlay_claim(struct vmw_private *dev_priv, uint32_t *out);
+int vmw_overlay_unref(struct vmw_private *dev_priv, uint32_t stream_id);
 
 /**
  * Inline helper functions
