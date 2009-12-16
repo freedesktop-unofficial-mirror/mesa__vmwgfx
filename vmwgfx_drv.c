@@ -111,14 +111,14 @@ static struct drm_ioctl_desc vmw_ioctls[] = {
 		      DRM_AUTH),
 	VMW_IOCTL_DEF(DRM_IOCTL_VMW_CURSOR_BYPASS,
 		      vmw_kms_cursor_bypass_ioctl,
-		      DRM_AUTH | DRM_MASTER),
+		      DRM_MASTER | DRM_CONTROL_ALLOW),
 
 	VMW_IOCTL_DEF(DRM_IOCTL_VMW_CONTROL_STREAM, vmw_overlay_ioctl,
-		      DRM_AUTH | DRM_MASTER),
+		      DRM_MASTER | DRM_CONTROL_ALLOW),
 	VMW_IOCTL_DEF(DRM_IOCTL_VMW_CLAIM_STREAM, vmw_stream_claim_ioctl,
-		      DRM_AUTH | DRM_MASTER),
+		      DRM_MASTER | DRM_CONTROL_ALLOW),
 	VMW_IOCTL_DEF(DRM_IOCTL_VMW_UNREF_STREAM, vmw_stream_unref_ioctl,
-		      DRM_AUTH | DRM_MASTER),
+		      DRM_MASTER | DRM_CONTROL_ALLOW),
 
 	VMW_IOCTL_DEF(DRM_IOCTL_VMW_CREATE_CONTEXT, vmw_context_define_ioctl,
 		      DRM_AUTH),
