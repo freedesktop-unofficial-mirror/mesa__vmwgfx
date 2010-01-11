@@ -104,7 +104,6 @@ static int vmw_dmabuf_pin_in_vram(struct vmw_private *dev_priv,
 				  bool pin, bool interruptible)
 {
 	struct ttm_buffer_object *bo = &buf->base;
-	struct ttm_bo_global *glob = bo->glob;
 	unsigned flags = 0;
 	int ret;
 
@@ -115,14 +114,6 @@ static int vmw_dmabuf_pin_in_vram(struct vmw_private *dev_priv,
 	ret = ttm_bo_reserve(bo, interruptible, false, false, 0);
 	if (unlikely(ret != 0))
 		goto err;
-
-	if (buf->gmr_bound) {
-		vmw_gmr_unbind(dev_priv, buf->gmr_id);
-		spin_lock(&glob->lru_lock);
-		ida_remove(&dev_priv->gmr_ida, buf->gmr_id);
-		spin_unlock(&glob->lru_lock);
-		buf->gmr_bound = NULL;
-	}
 
 	flags |= TTM_PL_FLAG_VRAM;
 	flags |= TTM_PL_FLAG_CACHED;
