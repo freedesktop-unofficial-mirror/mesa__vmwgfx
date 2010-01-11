@@ -145,7 +145,6 @@ static void vmw_move_notify(struct ttm_buffer_object *bo,
 
 static void vmw_swap_notify(struct ttm_buffer_object *bo)
 {
-	dump_stack();
 	vmw_dmabuf_gmr_unbind(bo);
 }
 
