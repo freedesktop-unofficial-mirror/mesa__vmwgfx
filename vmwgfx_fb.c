@@ -60,6 +60,9 @@ struct vmw_fb_par {
 		unsigned y1;
 		unsigned x2;
 		unsigned y2;
+#ifndef CONFIG_FB_DEFERRED_IO
+		struct delayed_work work;
+#endif
 	} dirty;
 };
 
@@ -274,10 +277,16 @@ static void vmw_fb_dirty_mark(struct vmw_fb_par *par,
 		par->dirty.y1 = y1;
 		par->dirty.x2 = x2;
 		par->dirty.y2 = y2;
-		/* if we are active start the dirty work
-		 * we share the work with the defio system */
+
+		/* if we are active start the dirty work */
 		if (par->dirty.active)
+#ifdef CONFIG_FB_DEFERRED_IO
+			/* we share the work with the defio system */
 			schedule_delayed_work(&info->deferred_work, VMW_DIRTY_DELAY);
+#else
+			schedule_delayed_work(&par->dirty.work, VMW_DIRTY_DELAY);
+		(void)info;
+#endif
 	} else {
 		if (x1 < par->dirty.x1)
 			par->dirty.x1 = x1;
@@ -291,6 +300,7 @@ static void vmw_fb_dirty_mark(struct vmw_fb_par *par,
 	spin_unlock_irqrestore(&par->dirty.lock, flags);
 }
 
+#ifdef CONFIG_FB_DEFERRED_IO
 static void vmw_deferred_io(struct fb_info *info,
 			    struct list_head *pagelist)
 {
@@ -328,6 +338,14 @@ struct fb_deferred_io vmw_defio = {
 	.delay		= VMW_DIRTY_DELAY,
 	.deferred_io	= vmw_deferred_io,
 };
+#else
+static void vmw_fb_dirty_work(struct work_struct *work)
+{
+	struct vmw_fb_par *par = container_of(work, struct vmw_fb_par,
+					      dirty.work.work);
+	vmw_fb_dirty_flush(par);
+}
+#endif
 
 /*
  * Draw code
@@ -569,8 +587,12 @@ int vmw_fb_init(struct vmw_private *vmw_priv)
 	par->dirty.y1 = par->dirty.y1 = 0;
 	par->dirty.active = true;
 	spin_lock_init(&par->dirty.lock);
+#ifdef CONFIG_FB_DEFERRED_IO
 	info->fbdefio = &vmw_defio;
 	fb_deferred_io_init(info);
+#else
+	INIT_DELAYED_WORK(&par->dirty.work, vmw_fb_dirty_work);
+#endif
 
 	ret = register_framebuffer(info);
 	if (unlikely(ret != 0))
@@ -605,9 +627,16 @@ int vmw_fb_close(struct vmw_private *vmw_priv)
 	bo = &par->vmw_bo->base;
 	par->vmw_bo = NULL;
 
+#ifdef CONFIG_FB_DEFERRED_IO
 	/* ??? order */
 	fb_deferred_io_cleanup(info);
+#endif
 	unregister_framebuffer(info);
+
+#ifndef CONFIG_FB_DEFERRED_IO
+	cancel_delayed_work(&par->dirty.work);
+	flush_scheduled_work();
+#endif
 
 	ttm_bo_kunmap(&par->map);
 	ttm_bo_unref(&bo);
@@ -743,7 +772,11 @@ err_no_buffer:
 
 	/* If there already was stuff dirty we wont
 	 * schedule a new work, so lets do it now */
+#ifdef CONFIG_FB_DEFERRED_IO
 	schedule_delayed_work(&info->deferred_work, 0);
+#else
+	schedule_delayed_work(&par->dirty.work, 0);
+#endif
 
 	return 0;
 }
