@@ -601,7 +601,9 @@ int vmw_fb_init(struct vmw_private *vmw_priv)
 	return 0;
 
 err_defio:
+#ifdef CONFIG_FB_DEFERRED_IO
 	fb_deferred_io_cleanup(info);
+#endif
 	ttm_bo_kunmap(&par->map);
 err_unref:
 	ttm_bo_unref((struct ttm_buffer_object **)&par->vmw_bo);
