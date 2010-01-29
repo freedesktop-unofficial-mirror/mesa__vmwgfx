@@ -209,7 +209,7 @@ static int vmw_driver_load(struct drm_device *dev, unsigned long chipset)
 {
 	struct vmw_private *dev_priv;
 	int ret;
- 	long svga_id;
+ 	uint32_t svga_id;
 
 	dev_priv = kzalloc(sizeof(*dev_priv), GFP_KERNEL);
 	if (unlikely(dev_priv == NULL)) {
@@ -243,8 +243,11 @@ static int vmw_driver_load(struct drm_device *dev, unsigned long chipset)
 
 	vmw_write(dev_priv, SVGA_REG_ID, SVGA_ID_2);
 	svga_id = vmw_read(dev_priv, SVGA_REG_ID);
-	if (svga_id == SVGA_ID_2) {
-		DRM_INFO("We have SVGA ID 2\n");
+	if (svga_id != SVGA_ID_2) {
+		ret = -ENOSYS;
+		DRM_ERROR("Unsuported SVGA ID 0x%x\n", svga_id);
+		mutex_unlock(&dev_priv->hw_mutex);
+		goto out_err0;
 	}
 
 	dev_priv->capabilities = vmw_read(dev_priv, SVGA_REG_CAPABILITIES);
