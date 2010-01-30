@@ -38,6 +38,7 @@ struct vmw_legacy_display {
 	struct list_head active;
 
 	unsigned num_active;
+	unsigned last_num_active;
 
 	struct vmw_framebuffer *fb;
 };
@@ -88,12 +89,45 @@ static int vmw_ldu_commit_list(struct vmw_private *dev_priv)
 {
 	struct vmw_legacy_display *lds = dev_priv->ldu_priv;
 	struct vmw_legacy_display_unit *entry;
-	struct drm_crtc *crtc;
+	struct drm_crtc *crtc = NULL;
 	int i = 0;
 
-	/* to stop the screen from changing size on resize */
-	vmw_write(dev_priv, SVGA_REG_NUM_GUEST_DISPLAYS, 0);
-	for (i = 0; i < lds->num_active; i++) {
+	/* If there is no display topology the host just assumes
+	 * that the guest will set the same layout as the host.
+	 */
+	if (!(dev_priv->capabilities & SVGA_CAP_DISPLAY_TOPOLOGY)) {
+		int w = 0, h = 0;
+		list_for_each_entry(entry, &lds->active, active) {
+			crtc = &entry->base.crtc;
+			w = max(w, crtc->x + crtc->mode.hdisplay);
+			h = max(h, crtc->y + crtc->mode.vdisplay);
+			i++;
+		}
+
+		if (crtc == NULL)
+			return 0;
+
+		vmw_write(dev_priv, SVGA_REG_ENABLE, 0);
+		if (vmw_fifo_have_pitchlock(dev_priv)) {
+			iowrite32(crtc->fb->pitch, dev_priv->mmio_virt + SVGA_FIFO_PITCHLOCK);
+		}
+		if (dev_priv->capabilities & SVGA_CAP_PITCHLOCK) {
+			vmw_write(dev_priv, SVGA_REG_PITCHLOCK, crtc->fb->pitch);
+		}
+
+		vmw_write(dev_priv, SVGA_REG_WIDTH, w);
+		vmw_write(dev_priv, SVGA_REG_HEIGHT, h);
+		vmw_write(dev_priv, SVGA_REG_BITS_PER_PIXEL, crtc->fb->bits_per_pixel);
+		vmw_write(dev_priv, SVGA_REG_DEPTH, crtc->fb->depth);
+		vmw_write(dev_priv, SVGA_REG_RED_MASK, 0x00ff0000);
+		vmw_write(dev_priv, SVGA_REG_GREEN_MASK, 0x0000ff00);
+		vmw_write(dev_priv, SVGA_REG_BLUE_MASK, 0x000000ff);
+		vmw_write(dev_priv, SVGA_REG_ENABLE, 1);
+
+		return 0;
+	}
+
+	for (i = 0; i < lds->last_num_active; i++) {
 		vmw_write(dev_priv, SVGA_REG_DISPLAY_ID, i);
 		vmw_write(dev_priv, SVGA_REG_DISPLAY_IS_PRIMARY, !i);
 		vmw_write(dev_priv, SVGA_REG_DISPLAY_POSITION_X, 0);
@@ -103,8 +137,6 @@ static int vmw_ldu_commit_list(struct vmw_private *dev_priv)
 		vmw_write(dev_priv, SVGA_REG_DISPLAY_ID, SVGA_ID_INVALID);
 	}
 
-	/* Now set the mode */
-	vmw_write(dev_priv, SVGA_REG_NUM_GUEST_DISPLAYS, lds->num_active);
 	i = 0;
 	list_for_each_entry(entry, &lds->active, active) {
 		crtc = &entry->base.crtc;
@@ -119,6 +151,10 @@ static int vmw_ldu_commit_list(struct vmw_private *dev_priv)
 
 		i++;
 	}
+
+	BUG_ON(i != lds->num_active);
+
+	lds->last_num_active = lds->num_active;
 
 	return 0;
 }
@@ -487,18 +523,22 @@ int vmw_kms_init_legacy_display_system(struct vmw_private *dev_priv)
 
 	INIT_LIST_HEAD(&dev_priv->ldu_priv->active);
 	dev_priv->ldu_priv->num_active = 0;
+	dev_priv->ldu_priv->last_num_active = 0;
 	dev_priv->ldu_priv->fb = NULL;
 
 	drm_mode_create_dirty_info_property(dev_priv->dev);
 
 	vmw_ldu_init(dev_priv, 0);
-	vmw_ldu_init(dev_priv, 1);
-	vmw_ldu_init(dev_priv, 2);
-	vmw_ldu_init(dev_priv, 3);
-	vmw_ldu_init(dev_priv, 4);
-	vmw_ldu_init(dev_priv, 5);
-	vmw_ldu_init(dev_priv, 6);
-	vmw_ldu_init(dev_priv, 7);
+	/* for old hardware without multimon only enable one display */
+	if (dev_priv->capabilities & SVGA_CAP_MULTIMON) {
+		vmw_ldu_init(dev_priv, 1);
+		vmw_ldu_init(dev_priv, 2);
+		vmw_ldu_init(dev_priv, 3);
+		vmw_ldu_init(dev_priv, 4);
+		vmw_ldu_init(dev_priv, 5);
+		vmw_ldu_init(dev_priv, 6);
+		vmw_ldu_init(dev_priv, 7);
+	}
 
 	return 0;
 }

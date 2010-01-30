@@ -135,16 +135,14 @@ static int vmw_fb_check_var(struct fb_var_screeninfo *var,
 		return -EINVAL;
 	}
 
-	/* without multimon its hard to resize */
-	if (!(vmw_priv->capabilities & SVGA_CAP_MULTIMON) &&
-	    (var->xres != par->max_width ||
-	     var->yres != par->max_height)) {
-		DRM_ERROR("Tried to resize, but we don't have multimon\n");
+	if (!(vmw_priv->capabilities & SVGA_CAP_DISPLAY_TOPOLOGY) &&
+	    (var->xoffset != 0 || var->yoffset != 0)) {
+		DRM_ERROR("Can not handle panning without display topology\n");
 		return -EINVAL;
 	}
 
-	if (var->xres > par->max_width ||
-	    var->yres > par->max_height) {
+	if ((var->xoffset + var->xres) > par->max_width ||
+	    (var->yoffset + var->yres) > par->max_height) {
 		DRM_ERROR("Requested geom can not fit in framebuffer\n");
 		return -EINVAL;
 	}
@@ -157,8 +155,7 @@ static int vmw_fb_set_par(struct fb_info *info)
 	struct vmw_fb_par *par = info->par;
 	struct vmw_private *vmw_priv = par->vmw_priv;
 
-	if (vmw_priv->capabilities & SVGA_CAP_MULTIMON) {
-		vmw_write(vmw_priv, SVGA_REG_NUM_GUEST_DISPLAYS, 1);
+	if (vmw_priv->capabilities & SVGA_CAP_DISPLAY_TOPOLOGY) {
 		vmw_write(vmw_priv, SVGA_REG_DISPLAY_ID, 0);
 		vmw_write(vmw_priv, SVGA_REG_DISPLAY_IS_PRIMARY, true);
 		vmw_write(vmw_priv, SVGA_REG_DISPLAY_POSITION_X, 0);
@@ -177,8 +174,6 @@ static int vmw_fb_set_par(struct fb_info *info)
 		vmw_write(vmw_priv, SVGA_REG_BLUE_MASK, 0x000000ff);
 
 		/* TODO check if pitch and offset changes */
-
-		vmw_write(vmw_priv, SVGA_REG_NUM_GUEST_DISPLAYS, 1);
 		vmw_write(vmw_priv, SVGA_REG_DISPLAY_ID, 0);
 		vmw_write(vmw_priv, SVGA_REG_DISPLAY_IS_PRIMARY, true);
 		vmw_write(vmw_priv, SVGA_REG_DISPLAY_POSITION_X, info->var.xoffset);
@@ -187,11 +182,28 @@ static int vmw_fb_set_par(struct fb_info *info)
 		vmw_write(vmw_priv, SVGA_REG_DISPLAY_HEIGHT, info->var.yres);
 		vmw_write(vmw_priv, SVGA_REG_DISPLAY_ID, SVGA_ID_INVALID);
 	} else {
+		vmw_write(vmw_priv, SVGA_REG_ENABLE, 0);
+		if (vmw_fifo_have_pitchlock(vmw_priv)) {
+			iowrite32(info->fix.line_length, vmw_priv->mmio_virt + SVGA_FIFO_PITCHLOCK);
+		}
+		if (vmw_priv->capabilities & SVGA_CAP_PITCHLOCK) {
+			vmw_write(vmw_priv, SVGA_REG_PITCHLOCK, info->fix.line_length);
+		}
+
 		vmw_write(vmw_priv, SVGA_REG_WIDTH, info->var.xres);
 		vmw_write(vmw_priv, SVGA_REG_HEIGHT, info->var.yres);
-
-		/* TODO check if pitch and offset changes */
+		vmw_write(vmw_priv, SVGA_REG_BITS_PER_PIXEL, par->bpp);
+		vmw_write(vmw_priv, SVGA_REG_DEPTH, par->depth);
+		vmw_write(vmw_priv, SVGA_REG_RED_MASK, 0x00ff0000);
+		vmw_write(vmw_priv, SVGA_REG_GREEN_MASK, 0x0000ff00);
+		vmw_write(vmw_priv, SVGA_REG_BLUE_MASK, 0x000000ff);
+		vmw_write(vmw_priv, SVGA_REG_ENABLE, 1);
 	}
+
+	/* This is really helpfull as if this is fails the user
+	 * can probably not see anything on the screen.
+	 */
+	WARN_ON(vmw_read(vmw_priv, SVGA_REG_FB_OFFSET) != 0);
 
 	return 0;
 }
@@ -443,13 +455,8 @@ int vmw_fb_init(struct vmw_private *vmw_priv)
 	fb_bbp = 32;
 	fb_depth = 24;
 
-	if (vmw_priv->capabilities & SVGA_CAP_MULTIMON) {
-		fb_width = min(vmw_priv->fb_max_width, (unsigned)2048);
-		fb_height = min(vmw_priv->fb_max_height, (unsigned)2048);
-	} else {
-		fb_width = min(vmw_priv->fb_max_width, initial_width);
-		fb_height = min(vmw_priv->fb_max_height, initial_height);
-	}
+	fb_width = min(vmw_priv->fb_max_width, (unsigned)2048);
+	fb_height = min(vmw_priv->fb_max_height, (unsigned)2048);
 
 	initial_width = min(fb_width, initial_width);
 	initial_height = min(fb_height, initial_height);
