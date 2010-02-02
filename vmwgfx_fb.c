@@ -156,6 +156,7 @@ static int vmw_fb_set_par(struct fb_info *info)
 	struct vmw_private *vmw_priv = par->vmw_priv;
 
 	if (vmw_priv->capabilities & SVGA_CAP_DISPLAY_TOPOLOGY) {
+		vmw_write(vmw_priv, SVGA_REG_ENABLE, 0);
 		vmw_write(vmw_priv, SVGA_REG_DISPLAY_ID, 0);
 		vmw_write(vmw_priv, SVGA_REG_DISPLAY_IS_PRIMARY, true);
 		vmw_write(vmw_priv, SVGA_REG_DISPLAY_POSITION_X, 0);
@@ -164,7 +165,10 @@ static int vmw_fb_set_par(struct fb_info *info)
 		vmw_write(vmw_priv, SVGA_REG_DISPLAY_HEIGHT, 0);
 		vmw_write(vmw_priv, SVGA_REG_DISPLAY_ID, SVGA_ID_INVALID);
 
-		vmw_write(vmw_priv, SVGA_REG_ENABLE, 1);
+		if (vmw_priv->capabilities & SVGA_CAP_PITCHLOCK)
+			vmw_write(vmw_priv, SVGA_REG_PITCHLOCK, info->fix.line_length);
+		else if (vmw_fifo_have_pitchlock(vmw_priv))
+			iowrite32(info->fix.line_length, vmw_priv->mmio_virt + SVGA_FIFO_PITCHLOCK);
 		vmw_write(vmw_priv, SVGA_REG_WIDTH, par->max_width);
 		vmw_write(vmw_priv, SVGA_REG_HEIGHT, par->max_height);
 		vmw_write(vmw_priv, SVGA_REG_BITS_PER_PIXEL, par->bpp);
@@ -181,15 +185,14 @@ static int vmw_fb_set_par(struct fb_info *info)
 		vmw_write(vmw_priv, SVGA_REG_DISPLAY_WIDTH, info->var.xres);
 		vmw_write(vmw_priv, SVGA_REG_DISPLAY_HEIGHT, info->var.yres);
 		vmw_write(vmw_priv, SVGA_REG_DISPLAY_ID, SVGA_ID_INVALID);
+		vmw_write(vmw_priv, SVGA_REG_NUM_GUEST_DISPLAYS, 1);
+		vmw_write(vmw_priv, SVGA_REG_ENABLE, 1);
 	} else {
 		vmw_write(vmw_priv, SVGA_REG_ENABLE, 0);
-		if (vmw_fifo_have_pitchlock(vmw_priv)) {
-			iowrite32(info->fix.line_length, vmw_priv->mmio_virt + SVGA_FIFO_PITCHLOCK);
-		}
-		if (vmw_priv->capabilities & SVGA_CAP_PITCHLOCK) {
+		if (vmw_priv->capabilities & SVGA_CAP_PITCHLOCK)
 			vmw_write(vmw_priv, SVGA_REG_PITCHLOCK, info->fix.line_length);
-		}
-
+		else if (vmw_fifo_have_pitchlock(vmw_priv))
+			iowrite32(info->fix.line_length, vmw_priv->mmio_virt + SVGA_FIFO_PITCHLOCK);
 		vmw_write(vmw_priv, SVGA_REG_WIDTH, info->var.xres);
 		vmw_write(vmw_priv, SVGA_REG_HEIGHT, info->var.yres);
 		vmw_write(vmw_priv, SVGA_REG_BITS_PER_PIXEL, par->bpp);
@@ -449,43 +452,23 @@ int vmw_fb_init(struct vmw_private *vmw_priv)
 	unsigned fb_bbp, fb_depth, fb_offset, fb_pitch, fb_size;
 	int ret;
 
+	/* XXX these shouldn't be hardcoded */
 	initial_width = 800;
 	initial_height = 600;
 
 	fb_bbp = 32;
 	fb_depth = 24;
 
+	/* XXX as shouldn't these be as well */
 	fb_width = min(vmw_priv->fb_max_width, (unsigned)2048);
 	fb_height = min(vmw_priv->fb_max_height, (unsigned)2048);
 
 	initial_width = min(fb_width, initial_width);
 	initial_height = min(fb_height, initial_height);
 
-	vmw_write(vmw_priv, SVGA_REG_WIDTH, fb_width);
-	vmw_write(vmw_priv, SVGA_REG_HEIGHT, fb_height);
-	vmw_write(vmw_priv, SVGA_REG_BITS_PER_PIXEL, fb_bbp);
-	vmw_write(vmw_priv, SVGA_REG_DEPTH, fb_depth);
-	vmw_write(vmw_priv, SVGA_REG_RED_MASK, 0x00ff0000);
-	vmw_write(vmw_priv, SVGA_REG_GREEN_MASK, 0x0000ff00);
-	vmw_write(vmw_priv, SVGA_REG_BLUE_MASK, 0x000000ff);
-
-	fb_size = vmw_read(vmw_priv, SVGA_REG_FB_SIZE);
+	fb_pitch = fb_width * fb_bbp / 8;
+	fb_size = fb_pitch * fb_height;
 	fb_offset = vmw_read(vmw_priv, SVGA_REG_FB_OFFSET);
-	fb_pitch = vmw_read(vmw_priv, SVGA_REG_BYTES_PER_LINE);
-
-	DRM_DEBUG("width  %u\n", vmw_read(vmw_priv, SVGA_REG_MAX_WIDTH));
-	DRM_DEBUG("height %u\n", vmw_read(vmw_priv, SVGA_REG_MAX_HEIGHT));
-	DRM_DEBUG("width  %u\n", vmw_read(vmw_priv, SVGA_REG_WIDTH));
-	DRM_DEBUG("height %u\n", vmw_read(vmw_priv, SVGA_REG_HEIGHT));
-	DRM_DEBUG("bpp    %u\n", vmw_read(vmw_priv, SVGA_REG_BITS_PER_PIXEL));
-	DRM_DEBUG("depth  %u\n", vmw_read(vmw_priv, SVGA_REG_DEPTH));
-	DRM_DEBUG("bpl    %u\n", vmw_read(vmw_priv, SVGA_REG_BYTES_PER_LINE));
-	DRM_DEBUG("r mask %08x\n", vmw_read(vmw_priv, SVGA_REG_RED_MASK));
-	DRM_DEBUG("g mask %08x\n", vmw_read(vmw_priv, SVGA_REG_GREEN_MASK));
-	DRM_DEBUG("b mask %08x\n", vmw_read(vmw_priv, SVGA_REG_BLUE_MASK));
-	DRM_DEBUG("fb_offset 0x%08x\n", fb_offset);
-	DRM_DEBUG("fb_pitch  %u\n", fb_pitch);
-	DRM_DEBUG("fb_size   %u kiB\n", fb_size / 1024);
 
 	info = framebuffer_alloc(sizeof(*par), device);
 	if (!info)

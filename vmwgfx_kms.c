@@ -617,7 +617,6 @@ static int vmw_framebuffer_dmabuf_pin(struct vmw_framebuffer *vfb)
 		vmw_write(dev_priv, SVGA_REG_RED_MASK, 0x00ff0000);
 		vmw_write(dev_priv, SVGA_REG_GREEN_MASK, 0x0000ff00);
 		vmw_write(dev_priv, SVGA_REG_BLUE_MASK, 0x000000ff);
-		vmw_write(dev_priv, SVGA_REG_ENABLE, 1);
 	} /* ldu code takes care of !DISPLAY_TOPOLOGY case */
 
 	vmw_overlay_resume_all(dev_priv);
@@ -833,21 +832,6 @@ out:
 
 int vmw_kms_save_vga(struct vmw_private *vmw_priv)
 {
-	/*
-	 * setup a single multimon monitor with the size
-	 * of 0x0, this stops the UI from resizing when we
-	 * change the framebuffer size
-	 */
-	if (vmw_priv->capabilities & SVGA_CAP_DISPLAY_TOPOLOGY) {
-		vmw_write(vmw_priv, SVGA_REG_DISPLAY_ID, 0);
-		vmw_write(vmw_priv, SVGA_REG_DISPLAY_IS_PRIMARY, true);
-		vmw_write(vmw_priv, SVGA_REG_DISPLAY_POSITION_X, 0);
-		vmw_write(vmw_priv, SVGA_REG_DISPLAY_POSITION_Y, 0);
-		vmw_write(vmw_priv, SVGA_REG_DISPLAY_WIDTH, 0);
-		vmw_write(vmw_priv, SVGA_REG_DISPLAY_HEIGHT, 0);
-		vmw_write(vmw_priv, SVGA_REG_DISPLAY_ID, SVGA_ID_INVALID);
-	}
-
 	vmw_priv->vga_width = vmw_read(vmw_priv, SVGA_REG_WIDTH);
 	vmw_priv->vga_height = vmw_read(vmw_priv, SVGA_REG_HEIGHT);
 	vmw_priv->vga_bpp = vmw_read(vmw_priv, SVGA_REG_BITS_PER_PIXEL);
@@ -856,10 +840,10 @@ int vmw_kms_save_vga(struct vmw_private *vmw_priv)
 	vmw_priv->vga_red_mask = vmw_read(vmw_priv, SVGA_REG_RED_MASK);
 	vmw_priv->vga_green_mask = vmw_read(vmw_priv, SVGA_REG_GREEN_MASK);
 	vmw_priv->vga_blue_mask = vmw_read(vmw_priv, SVGA_REG_BLUE_MASK);
-	if (vmw_fifo_have_pitchlock(vmw_priv))
-		vmw_priv->vga_pitchlock = ioread32(vmw_priv->mmio_virt + SVGA_FIFO_PITCHLOCK);
-	else if (vmw_priv->capabilities & SVGA_CAP_PITCHLOCK)
+	if (vmw_priv->capabilities & SVGA_CAP_PITCHLOCK)
 		vmw_priv->vga_pitchlock = vmw_read(vmw_priv, SVGA_REG_PITCHLOCK);
+	else if (vmw_fifo_have_pitchlock(vmw_priv))
+		vmw_priv->vga_pitchlock = ioread32(vmw_priv->mmio_virt + SVGA_FIFO_PITCHLOCK);
 
 	return 0;
 }
@@ -874,10 +858,10 @@ int vmw_kms_restore_vga(struct vmw_private *vmw_priv)
 	vmw_write(vmw_priv, SVGA_REG_RED_MASK, vmw_priv->vga_red_mask);
 	vmw_write(vmw_priv, SVGA_REG_GREEN_MASK, vmw_priv->vga_green_mask);
 	vmw_write(vmw_priv, SVGA_REG_BLUE_MASK, vmw_priv->vga_blue_mask);
-	if (vmw_fifo_have_pitchlock(vmw_priv))
-		iowrite32(vmw_priv->vga_pitchlock, vmw_priv->mmio_virt + SVGA_FIFO_PITCHLOCK);
-	else if (vmw_priv->capabilities & SVGA_CAP_PITCHLOCK)
+	if (vmw_priv->capabilities & SVGA_CAP_PITCHLOCK)
 		vmw_write(vmw_priv, SVGA_REG_PITCHLOCK, vmw_priv->vga_pitchlock);
+	else if (vmw_fifo_have_pitchlock(vmw_priv))
+		iowrite32(vmw_priv->vga_pitchlock, vmw_priv->mmio_virt + SVGA_FIFO_PITCHLOCK);
 
 	return 0;
 }

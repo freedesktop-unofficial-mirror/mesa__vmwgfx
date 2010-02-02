@@ -108,12 +108,10 @@ static int vmw_ldu_commit_list(struct vmw_private *dev_priv)
 			return 0;
 
 		vmw_write(dev_priv, SVGA_REG_ENABLE, 0);
-		if (vmw_fifo_have_pitchlock(dev_priv)) {
-			iowrite32(crtc->fb->pitch, dev_priv->mmio_virt + SVGA_FIFO_PITCHLOCK);
-		}
-		if (dev_priv->capabilities & SVGA_CAP_PITCHLOCK) {
+		if (dev_priv->capabilities & SVGA_CAP_PITCHLOCK)
 			vmw_write(dev_priv, SVGA_REG_PITCHLOCK, crtc->fb->pitch);
-		}
+		else if (vmw_fifo_have_pitchlock(dev_priv))
+			iowrite32(crtc->fb->pitch, dev_priv->mmio_virt + SVGA_FIFO_PITCHLOCK);
 
 		vmw_write(dev_priv, SVGA_REG_WIDTH, w);
 		vmw_write(dev_priv, SVGA_REG_HEIGHT, h);
@@ -151,6 +149,8 @@ static int vmw_ldu_commit_list(struct vmw_private *dev_priv)
 
 		i++;
 	}
+
+	vmw_write(dev_priv, SVGA_REG_ENABLE, i ? 1 : 0);
 
 	BUG_ON(i != lds->num_active);
 
