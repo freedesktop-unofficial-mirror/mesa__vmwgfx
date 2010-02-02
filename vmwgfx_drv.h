@@ -468,6 +468,9 @@ void vmw_kms_cursor_snoop(struct vmw_surface *srf,
 			  struct ttm_object_file *tfile,
 			  struct ttm_buffer_object *bo,
 			  SVGA3dCmdHeader *header);
+void vmw_kms_write_svga(struct vmw_private *vmw_priv,
+			unsigned width, unsigned height, unsigned pitch,
+			unsigned bbp, unsigned depth);
 
 /**
  * Overlay control - vmwgfx_overlay.c

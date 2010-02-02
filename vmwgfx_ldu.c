@@ -89,6 +89,7 @@ static int vmw_ldu_commit_list(struct vmw_private *dev_priv)
 {
 	struct vmw_legacy_display *lds = dev_priv->ldu_priv;
 	struct vmw_legacy_display_unit *entry;
+	struct drm_framebuffer *fb = NULL;
 	struct drm_crtc *crtc = NULL;
 	int i = 0;
 
@@ -106,24 +107,17 @@ static int vmw_ldu_commit_list(struct vmw_private *dev_priv)
 
 		if (crtc == NULL)
 			return 0;
+		fb = entry->base.crtc.fb;
 
 		vmw_write(dev_priv, SVGA_REG_ENABLE, 0);
-		if (dev_priv->capabilities & SVGA_CAP_PITCHLOCK)
-			vmw_write(dev_priv, SVGA_REG_PITCHLOCK, crtc->fb->pitch);
-		else if (vmw_fifo_have_pitchlock(dev_priv))
-			iowrite32(crtc->fb->pitch, dev_priv->mmio_virt + SVGA_FIFO_PITCHLOCK);
-
-		vmw_write(dev_priv, SVGA_REG_WIDTH, w);
-		vmw_write(dev_priv, SVGA_REG_HEIGHT, h);
-		vmw_write(dev_priv, SVGA_REG_BITS_PER_PIXEL, crtc->fb->bits_per_pixel);
-		vmw_write(dev_priv, SVGA_REG_DEPTH, crtc->fb->depth);
-		vmw_write(dev_priv, SVGA_REG_RED_MASK, 0x00ff0000);
-		vmw_write(dev_priv, SVGA_REG_GREEN_MASK, 0x0000ff00);
-		vmw_write(dev_priv, SVGA_REG_BLUE_MASK, 0x000000ff);
+		vmw_kms_write_svga(dev_priv, w, h, fb->pitch,
+				   fb->bits_per_pixel, fb->depth);
 		vmw_write(dev_priv, SVGA_REG_ENABLE, 1);
 
 		return 0;
 	}
+
+	vmw_write(dev_priv, SVGA_REG_ENABLE, 0);
 
 	for (i = 0; i < lds->last_num_active; i++) {
 		vmw_write(dev_priv, SVGA_REG_DISPLAY_ID, i);
@@ -133,6 +127,14 @@ static int vmw_ldu_commit_list(struct vmw_private *dev_priv)
 		vmw_write(dev_priv, SVGA_REG_DISPLAY_WIDTH, 0);
 		vmw_write(dev_priv, SVGA_REG_DISPLAY_HEIGHT, 0);
 		vmw_write(dev_priv, SVGA_REG_DISPLAY_ID, SVGA_ID_INVALID);
+	}
+
+	if (!list_empty(&lds->active)) {
+		entry = list_entry(lds->active.next, typeof(*entry), active);
+		fb = entry->base.crtc.fb;
+
+		vmw_kms_write_svga(dev_priv, fb->width, fb->height, fb->pitch,
+				   fb->bits_per_pixel, fb->depth);
 	}
 
 	i = 0;
@@ -150,7 +152,9 @@ static int vmw_ldu_commit_list(struct vmw_private *dev_priv)
 		i++;
 	}
 
-	vmw_write(dev_priv, SVGA_REG_ENABLE, i ? 1 : 0);
+	/* Make sure we always show something */
+	vmw_write(vmw_priv, SVGA_REG_NUM_GUEST_DISPLAYS, i ? i : 1);
+	vmw_write(dev_priv, SVGA_REG_ENABLE, 1);
 
 	BUG_ON(i != lds->num_active);
 

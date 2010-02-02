@@ -165,17 +165,9 @@ static int vmw_fb_set_par(struct fb_info *info)
 		vmw_write(vmw_priv, SVGA_REG_DISPLAY_HEIGHT, 0);
 		vmw_write(vmw_priv, SVGA_REG_DISPLAY_ID, SVGA_ID_INVALID);
 
-		if (vmw_priv->capabilities & SVGA_CAP_PITCHLOCK)
-			vmw_write(vmw_priv, SVGA_REG_PITCHLOCK, info->fix.line_length);
-		else if (vmw_fifo_have_pitchlock(vmw_priv))
-			iowrite32(info->fix.line_length, vmw_priv->mmio_virt + SVGA_FIFO_PITCHLOCK);
-		vmw_write(vmw_priv, SVGA_REG_WIDTH, par->max_width);
-		vmw_write(vmw_priv, SVGA_REG_HEIGHT, par->max_height);
-		vmw_write(vmw_priv, SVGA_REG_BITS_PER_PIXEL, par->bpp);
-		vmw_write(vmw_priv, SVGA_REG_DEPTH, par->depth);
-		vmw_write(vmw_priv, SVGA_REG_RED_MASK, 0x00ff0000);
-		vmw_write(vmw_priv, SVGA_REG_GREEN_MASK, 0x0000ff00);
-		vmw_write(vmw_priv, SVGA_REG_BLUE_MASK, 0x000000ff);
+		vmw_kms_write_svga(vmw_priv, info->var.xres, info->var.yres,
+				   info->fix.line_length,
+				   par->bpp, par->depth);
 
 		/* TODO check if pitch and offset changes */
 		vmw_write(vmw_priv, SVGA_REG_DISPLAY_ID, 0);
@@ -189,18 +181,11 @@ static int vmw_fb_set_par(struct fb_info *info)
 		vmw_write(vmw_priv, SVGA_REG_ENABLE, 1);
 	} else {
 		vmw_write(vmw_priv, SVGA_REG_ENABLE, 0);
-		if (vmw_priv->capabilities & SVGA_CAP_PITCHLOCK)
-			vmw_write(vmw_priv, SVGA_REG_PITCHLOCK, info->fix.line_length);
-		else if (vmw_fifo_have_pitchlock(vmw_priv))
-			iowrite32(info->fix.line_length, vmw_priv->mmio_virt + SVGA_FIFO_PITCHLOCK);
-		vmw_write(vmw_priv, SVGA_REG_WIDTH, info->var.xres);
-		vmw_write(vmw_priv, SVGA_REG_HEIGHT, info->var.yres);
-		vmw_write(vmw_priv, SVGA_REG_BITS_PER_PIXEL, par->bpp);
-		vmw_write(vmw_priv, SVGA_REG_DEPTH, par->depth);
-		vmw_write(vmw_priv, SVGA_REG_RED_MASK, 0x00ff0000);
-		vmw_write(vmw_priv, SVGA_REG_GREEN_MASK, 0x0000ff00);
-		vmw_write(vmw_priv, SVGA_REG_BLUE_MASK, 0x000000ff);
+		vmw_kms_write_svga(vmw_priv, info->var.xres, info->var.yres,
+				   info->fix.line_length,
+				   par->bpp, par->depth);
 		vmw_write(vmw_priv, SVGA_REG_ENABLE, 1);
+
 	}
 
 	/* This is really helpfull as if this is fails the user

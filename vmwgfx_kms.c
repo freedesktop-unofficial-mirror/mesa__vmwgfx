@@ -601,24 +601,6 @@ static int vmw_framebuffer_dmabuf_pin(struct vmw_framebuffer *vfb)
 
 	ret = vmw_dmabuf_to_start_of_vram(dev_priv, vfbd->buffer);
 
-	if (dev_priv->capabilities & SVGA_CAP_DISPLAY_TOPOLOGY) {
-		vmw_write(dev_priv, SVGA_REG_DISPLAY_ID, 0);
-		vmw_write(dev_priv, SVGA_REG_DISPLAY_IS_PRIMARY, true);
-		vmw_write(dev_priv, SVGA_REG_DISPLAY_POSITION_X, 0);
-		vmw_write(dev_priv, SVGA_REG_DISPLAY_POSITION_Y, 0);
-		vmw_write(dev_priv, SVGA_REG_DISPLAY_WIDTH, 0);
-		vmw_write(dev_priv, SVGA_REG_DISPLAY_HEIGHT, 0);
-		vmw_write(dev_priv, SVGA_REG_DISPLAY_ID, SVGA_ID_INVALID);
-
-		vmw_write(dev_priv, SVGA_REG_WIDTH, vfb->base.width);
-		vmw_write(dev_priv, SVGA_REG_HEIGHT, vfb->base.height);
-		vmw_write(dev_priv, SVGA_REG_BITS_PER_PIXEL, vfb->base.bits_per_pixel);
-		vmw_write(dev_priv, SVGA_REG_DEPTH, vfb->base.depth);
-		vmw_write(dev_priv, SVGA_REG_RED_MASK, 0x00ff0000);
-		vmw_write(dev_priv, SVGA_REG_GREEN_MASK, 0x0000ff00);
-		vmw_write(dev_priv, SVGA_REG_BLUE_MASK, 0x000000ff);
-	} /* ldu code takes care of !DISPLAY_TOPOLOGY case */
-
 	vmw_overlay_resume_all(dev_priv);
 
 	return 0;
@@ -828,6 +810,23 @@ out:
 	mutex_unlock(&dev->mode_config.mutex);
 
 	return ret;
+}
+
+void vmw_kms_write_svga(struct vmw_private *vmw_priv,
+			unsigned width, unsigned height, unsigned pitch,
+			unsigned bbp, unsigned depth)
+{
+	if (vmw_priv->capabilities & SVGA_CAP_PITCHLOCK)
+		vmw_write(vmw_priv, SVGA_REG_PITCHLOCK, pitch);
+	else if (vmw_fifo_have_pitchlock(vmw_priv))
+		iowrite32(pitch, vmw_priv->mmio_virt + SVGA_FIFO_PITCHLOCK);
+	vmw_write(vmw_priv, SVGA_REG_WIDTH, width);
+	vmw_write(vmw_priv, SVGA_REG_HEIGHT, height);
+	vmw_write(vmw_priv, SVGA_REG_BITS_PER_PIXEL, bbp);
+	vmw_write(vmw_priv, SVGA_REG_DEPTH, depth);
+	vmw_write(vmw_priv, SVGA_REG_RED_MASK, 0x00ff0000);
+	vmw_write(vmw_priv, SVGA_REG_GREEN_MASK, 0x0000ff00);
+	vmw_write(vmw_priv, SVGA_REG_BLUE_MASK, 0x000000ff);
 }
 
 int vmw_kms_save_vga(struct vmw_private *vmw_priv)
