@@ -153,7 +153,7 @@ static int vmw_ldu_commit_list(struct vmw_private *dev_priv)
 	}
 
 	/* Make sure we always show something */
-	vmw_write(vmw_priv, SVGA_REG_NUM_GUEST_DISPLAYS, i ? i : 1);
+	vmw_write(dev_priv, SVGA_REG_NUM_GUEST_DISPLAYS, i ? i : 1);
 	vmw_write(dev_priv, SVGA_REG_ENABLE, 1);
 
 	BUG_ON(i != lds->num_active);
