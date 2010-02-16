@@ -358,13 +358,14 @@ static int vmw_driver_load(struct drm_device *dev, unsigned long chipset)
 
 	ret = pci_request_regions(dev->pdev, "vmwgfx probe");
 	dev_priv->stealth = (ret != 0);
+#ifndef VMWGFX_HANDOVER
 	if (dev_priv->stealth) {
 		/**
 		 * Request at least the mmio PCI resource.
 		 */
 
 		DRM_INFO("It appears like vesafb is loaded. "
-			 "Ignore above error if any. Entering stealth mode.\n");
+			 "Ignore above error if any.\n");
 		ret = pci_request_region(dev->pdev, 2, "vmwgfx stealth probe");
 		if (unlikely(ret != 0)) {
 			DRM_ERROR("Failed reserving the SVGA MMIO resource.\n");
@@ -380,7 +381,27 @@ static int vmw_driver_load(struct drm_device *dev, unsigned long chipset)
 		vmw_overlay_init(dev_priv);
 		vmw_fb_init(dev_priv);
 	}
+#else
+	if (dev_priv->stealth) {
+		/**
+		 * Request at least the mmio PCI resource.
+		 */
 
+		DRM_INFO("It appears like vesafb is loaded. "
+			 "Ignore above error if any.\n");
+		ret = pci_request_region(dev->pdev, 2, "vmwgfx stealth probe");
+		if (unlikely(ret != 0)) {
+			DRM_ERROR("Failed reserving the SVGA MMIO resource.\n");
+			goto out_no_device;
+		}
+	}
+	ret = vmw_request_device(dev_priv);
+	if (unlikely(ret != 0))
+		goto out_no_device;
+	vmw_kms_init(dev_priv);
+	vmw_overlay_init(dev_priv);
+	vmw_fb_init(dev_priv);
+#endif
 	dev_priv->pm_nb.notifier_call = vmwgfx_pm_notifier;
 	register_pm_notifier(&dev_priv->pm_nb);
 
@@ -422,6 +443,7 @@ static int vmw_driver_unload(struct drm_device *dev)
 
 	unregister_pm_notifier(&dev_priv->pm_nb);
 
+#ifndef VMWGFX_HANDOVER
 	if (!dev_priv->stealth) {
 		vmw_fb_close(dev_priv);
 		vmw_kms_close(dev_priv);
@@ -433,6 +455,18 @@ static int vmw_driver_unload(struct drm_device *dev)
 		vmw_overlay_close(dev_priv);
 		pci_release_region(dev->pdev, 2);
 	}
+#else
+	vmw_fb_close(dev_priv);
+	vmw_kms_close(dev_priv);
+	vmw_overlay_close(dev_priv);
+	vmw_release_device(dev_priv);
+	pci_release_regions(dev->pdev);
+	if (dev_priv->stealth)
+		pci_release_region(dev->pdev, 2);
+	else
+		pci_release_regions(dev->pdev);
+#endif
+
 	if (dev_priv->capabilities & SVGA_CAP_IRQMASK)
 		drm_irq_uninstall(dev_priv->dev);
 	if (dev->devname == vmw_devname)
@@ -612,12 +646,14 @@ static int vmw_master_set(struct drm_device *dev,
 	int ret = 0;
 
 	DRM_INFO("Master set.\n");
+
+#ifndef VMWGFX_HANDOVER
 	if (dev_priv->stealth) {
 		ret = vmw_request_device(dev_priv);
 		if (unlikely(ret != 0))
 			return ret;
 	}
-
+#endif
 	if (active) {
 		BUG_ON(active != &dev_priv->fbdev_master);
 		ret = ttm_vt_lock(&active->lock, false, vmw_fp->tfile);
@@ -676,18 +712,24 @@ static void vmw_master_drop(struct drm_device *dev,
 
 	ttm_lock_set_kill(&vmaster->lock, true, SIGTERM);
 
+#ifndef VMWGFX_HANDOVER
 	if (dev_priv->stealth) {
 		ret = ttm_bo_evict_mm(&dev_priv->bdev, TTM_PL_VRAM);
 		if (unlikely(ret != 0))
 			DRM_ERROR("Unable to clean VRAM on master drop.\n");
 		vmw_release_device(dev_priv);
 	}
+#endif
 	dev_priv->active_master = &dev_priv->fbdev_master;
 	ttm_lock_set_kill(&dev_priv->fbdev_master.lock, false, SIGTERM);
 	ttm_vt_unlock(&dev_priv->fbdev_master.lock);
 
+#ifndef VMWGFX_HANDOVER
 	if (!dev_priv->stealth)
 		vmw_fb_on(dev_priv);
+#else
+	vmw_fb_on(dev_priv);
+#endif
 }
 
 

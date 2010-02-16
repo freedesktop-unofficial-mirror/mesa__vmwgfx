@@ -53,6 +53,10 @@ extern int vmwgfx_init(void);
 extern void vmwgfx_exit(void);
 #endif
 
+#if  (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 32))
+#define VMWGFX_HANDOVER
+#endif
+
 struct vmw_fpriv {
 	struct drm_master *locked_master;
 	struct ttm_object_file *tfile;
