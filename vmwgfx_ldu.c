@@ -170,6 +170,7 @@ static int vmw_ldu_del_active(struct vmw_private *vmw_priv,
 	if (list_empty(&ldu->active))
 		return 0;
 
+	/* must init otherwise list_empty(&ldu->active) well not work */
 	list_del_init(&ldu->active);
 	if (--(ld->num_active) == 0) {
 		BUG_ON(!ld->fb);
@@ -248,6 +249,7 @@ static int vmw_ldu_crtc_set_config(struct drm_mode_set *set)
 
 	/* ldu only supports one fb active at the time */
 	if (dev_priv->ldu_priv->fb && vfb &&
+	    !(dev_priv->ldu_priv->num_active == 1 && !list_empty(&ldu->active)) &&
 	    dev_priv->ldu_priv->fb != vfb) {
 		DRM_ERROR("Multiple framebuffers not supported\n");
 		return -EINVAL;
