@@ -623,7 +623,7 @@ int ttm_tt_swapout(struct ttm_tt *ttm, struct file *persistant_swap_storage)
 		if (unlikely(from_page == NULL))
 			continue;
 		to_page = read_mapping_page(swap_space, i, NULL);
-		if (unlikely(to_page == NULL))
+		if (unlikely(IS_ERR(to_page)))
 			goto out_err;
 
 		preempt_disable();
