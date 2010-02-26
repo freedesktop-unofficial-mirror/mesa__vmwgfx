@@ -347,8 +347,10 @@ static void vmw_ldu_connector_restore(struct drm_connector *connector)
 static enum drm_connector_status
 	vmw_ldu_connector_detect(struct drm_connector *connector)
 {
-	/* XXX vmwctrl should control connection status */
-	if (vmw_connector_to_ldu(connector)->base.unit == 0)
+	struct vmw_private *dev_priv = vmw_priv(connector->dev);
+
+	if (vmw_read(dev_priv, SVGA_REG_NUM_DISPLAYS) >
+	    vmw_connector_to_ldu(connector)->unit)
 		return connector_status_connected;
 	return connector_status_disconnected;
 }
@@ -498,10 +500,7 @@ static int vmw_ldu_init(struct vmw_private *dev_priv, unsigned unit)
 	drm_connector_init(dev, connector, &vmw_legacy_connector_funcs,
 			   DRM_MODE_CONNECTOR_LVDS);
 	/* Initial status */
-	if (unit == 0)
-		connector->status = connector_status_connected;
-	else
-		connector->status = connector_status_disconnected;
+	connector->status = vmw_ldu_connector_detect(connector);
 
 	drm_encoder_init(dev, encoder, &vmw_legacy_encoder_funcs,
 			 DRM_MODE_ENCODER_LVDS);
