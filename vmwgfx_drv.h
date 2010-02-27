@@ -263,7 +263,9 @@ struct vmw_private {
 	 * Operating mode.
 	 */
 
+	bool handover;
 	bool stealth;
+	bool reserved_all;
 	bool is_opened;
 
 	/**

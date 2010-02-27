@@ -144,11 +144,16 @@ static struct pci_device_id vmw_pci_id_list[] = {
 };
 
 static char *vmw_devname = "vmwgfx";
+static int force_stealth;
 
 static int vmw_probe(struct pci_dev *, const struct pci_device_id *);
 static void vmw_master_init(struct vmw_master *);
 static int vmwgfx_pm_notifier(struct notifier_block *nb, unsigned long val,
 			      void *ptr);
+
+MODULE_PARM_DESC(force_stealth, "Force stealth mode");
+module_param_named(force_stealth, force_stealth, int, 0600);
+
 
 static void vmw_print_capabilities(uint32_t capabilities)
 {
@@ -221,6 +226,10 @@ static int vmw_driver_load(struct drm_device *dev, unsigned long chipset)
 	dev_priv->dev = dev;
 	dev_priv->vmw_chipset = chipset;
 	dev_priv->last_read_sequence = (uint32_t) -100;
+#ifdef VMWGFX_HANDOVER
+	if (!force_stealth)
+		dev_priv->handover = true;
+#endif
 	mutex_init(&dev_priv->hw_mutex);
 	mutex_init(&dev_priv->cmdbuf_mutex);
 	rwlock_init(&dev_priv->resource_lock);
@@ -356,24 +365,56 @@ static int vmw_driver_load(struct drm_device *dev, unsigned long chipset)
 		}
 	}
 
-	ret = pci_request_regions(dev->pdev, "vmwgfx probe");
-	dev_priv->stealth = (ret != 0);
-#ifndef VMWGFX_HANDOVER
-	if (dev_priv->stealth) {
-		/**
-		 * Request at least the mmio PCI resource.
-		 */
+	if (force_stealth)
+		DRM_INFO("Forcing stealth mode.\n");
 
-		DRM_INFO("It appears like vesafb is loaded. "
-			 "Ignore above error if any.\n");
-		ret = pci_request_region(dev->pdev, 2, "vmwgfx stealth probe");
-		if (unlikely(ret != 0)) {
-			DRM_ERROR("Failed reserving the SVGA MMIO resource.\n");
-			goto out_no_device;
+	ret = pci_request_regions(dev->pdev, "vmwgfx probe");
+	dev_priv->stealth = (ret != 0) || force_stealth;
+	if (!dev_priv->handover) {
+		if (dev_priv->stealth) {
+			/**
+			 * Request at least the mmio PCI resource.
+			 */
+
+			if (ret != 0) {
+				DRM_INFO("It appears like vesafb is loaded. "
+					 "Ignore above error if any.\n");
+				ret = pci_request_region
+					(dev->pdev, 2,
+					 "vmwgfx stealth probe");
+				if (unlikely(ret != 0)) {
+					DRM_ERROR("Failed reserving the "
+						  "SVGA MMIO resource.\n");
+					goto out_no_device;
+				}
+			} else
+				dev_priv->reserved_all = true;
+			vmw_kms_init(dev_priv);
+			vmw_overlay_init(dev_priv);
+		} else {
+			ret = vmw_request_device(dev_priv);
+			if (unlikely(ret != 0))
+				goto out_no_device;
+			vmw_kms_init(dev_priv);
+			vmw_overlay_init(dev_priv);
+			vmw_fb_init(dev_priv);
 		}
-		vmw_kms_init(dev_priv);
-		vmw_overlay_init(dev_priv);
 	} else {
+		if (dev_priv->stealth) {
+			/**
+			 * Request at least the mmio PCI resource.
+			 */
+
+			DRM_INFO("It appears like vesafb is loaded. "
+				 "Ignore above error if any.\n");
+			ret = pci_request_region(dev->pdev, 2,
+						 "vmwgfx stealth probe");
+			if (unlikely(ret != 0)) {
+				DRM_ERROR("Failed reserving the "
+					  "SVGA MMIO resource.\n");
+				goto out_no_device;
+			}
+		}
 		ret = vmw_request_device(dev_priv);
 		if (unlikely(ret != 0))
 			goto out_no_device;
@@ -381,27 +422,6 @@ static int vmw_driver_load(struct drm_device *dev, unsigned long chipset)
 		vmw_overlay_init(dev_priv);
 		vmw_fb_init(dev_priv);
 	}
-#else
-	if (dev_priv->stealth) {
-		/**
-		 * Request at least the mmio PCI resource.
-		 */
-
-		DRM_INFO("It appears like vesafb is loaded. "
-			 "Ignore above error if any.\n");
-		ret = pci_request_region(dev->pdev, 2, "vmwgfx stealth probe");
-		if (unlikely(ret != 0)) {
-			DRM_ERROR("Failed reserving the SVGA MMIO resource.\n");
-			goto out_no_device;
-		}
-	}
-	ret = vmw_request_device(dev_priv);
-	if (unlikely(ret != 0))
-		goto out_no_device;
-	vmw_kms_init(dev_priv);
-	vmw_overlay_init(dev_priv);
-	vmw_fb_init(dev_priv);
-#endif
 	dev_priv->pm_nb.notifier_call = vmwgfx_pm_notifier;
 	register_pm_notifier(&dev_priv->pm_nb);
 
@@ -443,29 +463,32 @@ static int vmw_driver_unload(struct drm_device *dev)
 
 	unregister_pm_notifier(&dev_priv->pm_nb);
 
-#ifndef VMWGFX_HANDOVER
-	if (!dev_priv->stealth) {
+	if (!dev_priv->handover) {
+		if (!dev_priv->stealth) {
+			vmw_fb_close(dev_priv);
+			vmw_kms_close(dev_priv);
+			vmw_overlay_close(dev_priv);
+			vmw_release_device(dev_priv);
+			pci_release_regions(dev->pdev);
+		} else {
+			vmw_kms_close(dev_priv);
+			vmw_overlay_close(dev_priv);
+			if (dev_priv->reserved_all)
+				pci_release_regions(dev->pdev);
+			else
+				pci_release_region(dev->pdev, 2);
+		}
+	} else {
 		vmw_fb_close(dev_priv);
 		vmw_kms_close(dev_priv);
 		vmw_overlay_close(dev_priv);
 		vmw_release_device(dev_priv);
 		pci_release_regions(dev->pdev);
-	} else {
-		vmw_kms_close(dev_priv);
-		vmw_overlay_close(dev_priv);
-		pci_release_region(dev->pdev, 2);
+		if (dev_priv->stealth)
+			pci_release_region(dev->pdev, 2);
+		else
+			pci_release_regions(dev->pdev);
 	}
-#else
-	vmw_fb_close(dev_priv);
-	vmw_kms_close(dev_priv);
-	vmw_overlay_close(dev_priv);
-	vmw_release_device(dev_priv);
-	pci_release_regions(dev->pdev);
-	if (dev_priv->stealth)
-		pci_release_region(dev->pdev, 2);
-	else
-		pci_release_regions(dev->pdev);
-#endif
 
 	if (dev_priv->capabilities & SVGA_CAP_IRQMASK)
 		drm_irq_uninstall(dev_priv->dev);
@@ -647,13 +670,12 @@ static int vmw_master_set(struct drm_device *dev,
 
 	DRM_INFO("Master set.\n");
 
-#ifndef VMWGFX_HANDOVER
-	if (dev_priv->stealth) {
+	if (!dev_priv->handover && dev_priv->stealth) {
 		ret = vmw_request_device(dev_priv);
 		if (unlikely(ret != 0))
 			return ret;
 	}
-#endif
+
 	if (active) {
 		BUG_ON(active != &dev_priv->fbdev_master);
 		ret = ttm_vt_lock(&active->lock, false, vmw_fp->tfile);
@@ -712,24 +734,19 @@ static void vmw_master_drop(struct drm_device *dev,
 
 	ttm_lock_set_kill(&vmaster->lock, true, SIGTERM);
 
-#ifndef VMWGFX_HANDOVER
-	if (dev_priv->stealth) {
+	if (!dev_priv->handover && dev_priv->stealth) {
 		ret = ttm_bo_evict_mm(&dev_priv->bdev, TTM_PL_VRAM);
 		if (unlikely(ret != 0))
 			DRM_ERROR("Unable to clean VRAM on master drop.\n");
 		vmw_release_device(dev_priv);
 	}
-#endif
+
 	dev_priv->active_master = &dev_priv->fbdev_master;
 	ttm_lock_set_kill(&dev_priv->fbdev_master.lock, false, SIGTERM);
 	ttm_vt_unlock(&dev_priv->fbdev_master.lock);
 
-#ifndef VMWGFX_HANDOVER
-	if (!dev_priv->stealth)
+	if (!dev_priv->stealth || dev_priv->handover)
 		vmw_fb_on(dev_priv);
-#else
-	vmw_fb_on(dev_priv);
-#endif
 }
 
 
@@ -901,4 +918,5 @@ module_exit(vmwgfx_exit);
 MODULE_AUTHOR("VMware Inc. and others");
 MODULE_DESCRIPTION("Standalone drm driver for the VMware SVGA device");
 MODULE_LICENSE("GPL and additional rights");
+
 #endif
