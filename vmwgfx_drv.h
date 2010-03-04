@@ -57,6 +57,9 @@ extern void vmwgfx_exit(void);
 #define VMWGFX_HANDOVER
 #endif
 
+/* module option to turn off 3d support */
+extern int force_no_3d;
+
 struct vmw_fpriv {
 	struct drm_master *locked_master;
 	struct ttm_object_file *tfile;

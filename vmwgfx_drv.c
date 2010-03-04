@@ -145,6 +145,7 @@ static struct pci_device_id vmw_pci_id_list[] = {
 
 static char *vmw_devname = "vmwgfx";
 static int force_stealth;
+int force_no_3d;
 
 static int vmw_probe(struct pci_dev *, const struct pci_device_id *);
 static void vmw_master_init(struct vmw_master *);
@@ -153,6 +154,8 @@ static int vmwgfx_pm_notifier(struct notifier_block *nb, unsigned long val,
 
 MODULE_PARM_DESC(force_stealth, "Force stealth mode");
 module_param_named(force_stealth, force_stealth, int, 0600);
+MODULE_PARM_DESC(force_no_3d, "Force no 3D");
+module_param_named(force_no_3d, force_no_3d, int, 0600);
 
 
 static void vmw_print_capabilities(uint32_t capabilities)
@@ -425,7 +428,11 @@ static int vmw_driver_load(struct drm_device *dev, unsigned long chipset)
 	dev_priv->pm_nb.notifier_call = vmwgfx_pm_notifier;
 	register_pm_notifier(&dev_priv->pm_nb);
 
-	DRM_INFO("%s", vmw_fifo_have_3d(dev_priv) ? "Have 3D\n" : "No 3D\n");
+	if (force_no_3d)
+		DRM_INFO("No 3D (forced) (%s 3D)\n",
+			 vmw_fifo_have_3d(dev_priv) ? "Have" : "No");
+	else
+		DRM_INFO("%s 3D\n", vmw_fifo_have_3d(dev_priv) ? "Have" : "No");
 
 	return 0;
 
