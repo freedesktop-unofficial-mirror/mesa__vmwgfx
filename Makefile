@@ -205,11 +205,6 @@ endif
 # This needs to go before all other include paths.
 EXTRA_CFLAGS += -I$(DRMSRCDIR)
 
-GIT_REVISION := $(shell cd "$(DRMSRCDIR)" && git describe --abbrev=17)
-ifneq ($(GIT_REVISION),)
-EXTRA_CFLAGS+=-D"GIT_REVISION=\"$(GIT_REVISION)\""
-endif
-
 include $(DRMSRCDIR)/Makefile.kernel
 
 # Depencencies
