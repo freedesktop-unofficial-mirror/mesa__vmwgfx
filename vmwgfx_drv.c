@@ -203,6 +203,12 @@ static int vmw_request_device(struct vmw_private *dev_priv)
 		return ret;
 	}
 
+	if (force_no_3d)
+		DRM_INFO("No 3D (forced) (%s 3D)\n",
+			 vmw_fifo_have_3d(dev_priv) ? "Have" : "No");
+	else
+		DRM_INFO("%s 3D\n", vmw_fifo_have_3d(dev_priv) ? "Have" : "No");
+
 	return 0;
 }
 
@@ -428,11 +434,12 @@ static int vmw_driver_load(struct drm_device *dev, unsigned long chipset)
 	dev_priv->pm_nb.notifier_call = vmwgfx_pm_notifier;
 	register_pm_notifier(&dev_priv->pm_nb);
 
-	if (force_no_3d)
-		DRM_INFO("No 3D (forced) (%s 3D)\n",
-			 vmw_fifo_have_3d(dev_priv) ? "Have" : "No");
-	else
-		DRM_INFO("%s 3D\n", vmw_fifo_have_3d(dev_priv) ? "Have" : "No");
+	if (!dev_priv->handover && dev_priv->stealth) {
+		if (force_no_3d)
+			DRM_INFO("No 3D (forced)\n");
+		else
+			DRM_INFO("Delayed 3D detection\n");
+	}
 
 	return 0;
 
