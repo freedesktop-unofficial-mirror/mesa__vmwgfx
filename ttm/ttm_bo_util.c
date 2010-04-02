@@ -37,6 +37,7 @@
 #include <linux/vmalloc.h>
 #include <linux/module.h>
 #include <linux/version.h>
+#include <linux/slab.h>
 
 void ttm_bo_free_old_node(struct ttm_buffer_object *bo)
 {
