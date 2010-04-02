@@ -53,7 +53,7 @@ extern int vmwgfx_init(void);
 extern void vmwgfx_exit(void);
 #endif
 
-#if  (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 32))
+#if  (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 31))
 #define VMWGFX_HANDOVER
 #endif
 

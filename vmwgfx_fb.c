@@ -551,11 +551,12 @@ int vmw_fb_init(struct vmw_private *vmw_priv)
 	info->pixmap.scan_align = 1;
 #endif
 
+#ifdef VMWGFX_HANDOVER
 	if (vmw_priv->handover) {
 		info->aperture_base = vmw_priv->vram_start;
 		info->aperture_size = vmw_priv->vram_size;
 	}
-
+#endif
 	/*
 	 * Dirty & Deferred IO
 	 */
