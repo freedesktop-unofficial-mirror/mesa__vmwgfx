@@ -71,11 +71,22 @@ static int drm_class_resume(struct device *dev)
 }
 
 /* Display the version of drm_core. This doesn't work right in current design */
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,34))
 static ssize_t version_show(struct class *dev, char *buf)
 {
 	return sprintf(buf, "%s %d.%d.%d %s\n", CORE_NAME, CORE_MAJOR,
 		       CORE_MINOR, CORE_PATCHLEVEL, CORE_DATE);
 }
+
+static CLASS_ATTR(version, S_IRUGO, version_show, NULL);
+#else
+static CLASS_ATTR_STRING(version, S_IRUGO,
+		CORE_NAME " "
+		__stringify(CORE_MAJOR) "."
+		__stringify(CORE_MINOR) "."
+		__stringify(CORE_PATCHLEVEL) " "
+		CORE_DATE);
+#endif
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,32))
 static char *drm_devnode(struct device *dev, mode_t *mode)
@@ -84,8 +95,6 @@ static char *drm_devnode(struct device *dev, mode_t *mode)
 }
 #endif
 
-
-static CLASS_ATTR(version, S_IRUGO, version_show, NULL);
 
 /**
  * drm_sysfs_create - create a struct drm_sysfs_class structure
@@ -112,7 +121,11 @@ struct class *drm_sysfs_create(struct module *owner, char *name)
 	class->suspend = drm_class_suspend;
 	class->resume = drm_class_resume;
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,34))
 	err = class_create_file(class, &class_attr_version);
+#else
+	err = class_create_file(class, &class_attr_version.attr);
+#endif
 	if (err)
 		goto err_out_class;
 
@@ -137,7 +150,11 @@ void drm_sysfs_destroy(void)
 {
 	if ((drm_class == NULL) || (IS_ERR(drm_class)))
 		return;
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,34))
 	class_remove_file(drm_class, &class_attr_version);
+#else
+	class_remove_file(drm_class, &class_attr_version.attr);
+#endif
 	class_destroy(drm_class);
 }
 
