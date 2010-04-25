@@ -89,6 +89,10 @@
 	DRM_IOWR(DRM_COMMAND_BASE + DRM_VMW_FENCE_WAIT,		\
 		 struct drm_vmw_fence_wait_arg)
 
+#define DRM_IOCTL_VMW_UPDATE_LAYOUT				\
+	DRM_IOWR(DRM_COMMAND_BASE + DRM_VMW_UPDATE_LAYOUT,	\
+		 struct drm_vmw_update_layout_arg)
+
 
 /**
  * The core DRM version of this macro doesn't account for
@@ -135,7 +139,10 @@ static struct drm_ioctl_desc vmw_ioctls[] = {
 	VMW_IOCTL_DEF(DRM_IOCTL_VMW_FIFO_DEBUG, vmw_fifo_debug_ioctl,
 		      DRM_AUTH | DRM_ROOT_ONLY | DRM_MASTER),
 	VMW_IOCTL_DEF(DRM_IOCTL_VMW_FENCE_WAIT, vmw_fence_wait_ioctl,
-		      DRM_AUTH)
+		      DRM_AUTH),
+
+	VMW_IOCTL_DEF(DRM_IOCTL_VMW_UPDATE_LAYOUT, vmw_kms_update_layout_ioctl,
+		      DRM_MASTER | DRM_CONTROL_ALLOW)
 };
 
 static struct pci_device_id vmw_pci_id_list[] = {
