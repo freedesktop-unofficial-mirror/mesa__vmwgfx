@@ -299,6 +299,9 @@ struct vmw_private {
 	struct vmw_master *active_master;
 	struct vmw_master fbdev_master;
 	struct notifier_block pm_nb;
+
+	struct mutex release_mutex;
+	uint32_t num_3d_resources;
 };
 
 static inline struct vmw_private *vmw_priv(struct drm_device *dev)
@@ -332,6 +335,9 @@ static inline uint32_t vmw_read(struct vmw_private *dev_priv,
 	val = inl(dev_priv->io_start + VMWGFX_VALUE_PORT);
 	return val;
 }
+
+int vmw_3d_resource_inc(struct vmw_private *dev_priv);
+void vmw_3d_resource_dec(struct vmw_private *dev_priv);
 
 /**
  * GMR utilities - vmwgfx_gmr.c
