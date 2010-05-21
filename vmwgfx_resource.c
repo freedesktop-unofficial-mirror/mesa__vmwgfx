@@ -326,15 +326,23 @@ int vmw_context_define_ioctl(struct drm_device *dev, void *data,
 			     struct drm_file *file_priv)
 {
 	struct vmw_private *dev_priv = vmw_priv(dev);
-	struct vmw_user_context *ctx = kmalloc(sizeof(*ctx), GFP_KERNEL);
+	struct vmw_user_context *ctx;
 	struct vmw_resource *res;
 	struct vmw_resource *tmp;
 	struct drm_vmw_context_arg *arg = (struct drm_vmw_context_arg *)data;
 	struct ttm_object_file *tfile = vmw_fpriv(file_priv)->tfile;
 	int ret;
+	struct vmw_master *vmaster = vmw_master(file_priv->master);
 
-	if (unlikely(ctx == NULL))
-		return -ENOMEM;
+	ret = ttm_read_lock(&vmaster->lock, true);
+	if (unlikely(ret != 0))
+		return ret;
+
+	ctx = kmalloc(sizeof(*ctx), GFP_KERNEL);
+	if (unlikely(ctx == NULL)) {
+		ret = -ENOMEM;
+		goto out_ttm_unlock;
+	}
 
 	res = &ctx->res;
 	ctx->base.shareable = false;
@@ -342,7 +350,7 @@ int vmw_context_define_ioctl(struct drm_device *dev, void *data,
 
 	ret = vmw_context_init(dev_priv, res, vmw_user_context_free);
 	if (unlikely(ret != 0))
-		return ret;
+		goto out_ttm_unlock;
 
 	tmp = vmw_resource_reference(&ctx->res);
 	ret = ttm_base_object_init(tfile, &ctx->base, false, VMW_RES_CONTEXT,
@@ -356,6 +364,8 @@ int vmw_context_define_ioctl(struct drm_device *dev, void *data,
 	arg->cid = res->id;
 out_err:
 	vmw_resource_unreference(&res);
+out_ttm_unlock:
+	ttm_read_unlock(&vmaster->lock);
 	return ret;
 
 }
@@ -552,8 +562,7 @@ int vmw_surface_define_ioctl(struct drm_device *dev, void *data,
 			     struct drm_file *file_priv)
 {
 	struct vmw_private *dev_priv = vmw_priv(dev);
-	struct vmw_user_surface *user_srf =
-	    kmalloc(sizeof(*user_srf), GFP_KERNEL);
+	struct vmw_user_surface *user_srf;
 	struct vmw_surface *srf;
 	struct vmw_resource *res;
 	struct vmw_resource *tmp;
@@ -565,9 +574,17 @@ int vmw_surface_define_ioctl(struct drm_device *dev, void *data,
 	struct drm_vmw_size __user *user_sizes;
 	int ret;
 	int i;
+	struct vmw_master *vmaster = vmw_master(file_priv->master);
 
-	if (unlikely(user_srf == NULL))
-		return -ENOMEM;
+	ret = ttm_read_lock(&vmaster->lock, true);
+	if (unlikely(ret != 0))
+		return ret;
+
+	user_srf = kmalloc(sizeof(*user_srf), GFP_KERNEL);
+	if (unlikely(user_srf == NULL)) {
+		ret = -ENOMEM;
+		goto out_ttm_unlock;
+	}
 
 	srf = &user_srf->srf;
 	res = &srf->res;
@@ -630,7 +647,7 @@ int vmw_surface_define_ioctl(struct drm_device *dev, void *data,
 
 	ret = vmw_surface_init(dev_priv, srf, vmw_user_surface_free);
 	if (unlikely(ret != 0))
-		return ret;
+		goto out_ttm_unlock;
 
 	tmp = vmw_resource_reference(&srf->res);
 	ret = ttm_base_object_init(tfile, &user_srf->base,
@@ -640,7 +657,7 @@ int vmw_surface_define_ioctl(struct drm_device *dev, void *data,
 	if (unlikely(ret != 0)) {
 		vmw_resource_unreference(&tmp);
 		vmw_resource_unreference(&res);
-		return ret;
+		goto out_ttm_unlock;
 	}
 
 	rep->sid = user_srf->base.hash.key;
@@ -648,11 +665,15 @@ int vmw_surface_define_ioctl(struct drm_device *dev, void *data,
 		DRM_ERROR("Created bad Surface ID.\n");
 
 	vmw_resource_unreference(&res);
+	ttm_read_unlock(&vmaster->lock);
 	return 0;
 out_err1:
 	kfree(srf->sizes);
 out_err0:
 	kfree(user_srf);
+out_ttm_unlock:
+	ttm_read_unlock(&vmaster->lock);
+
 	return ret;
 }
 
