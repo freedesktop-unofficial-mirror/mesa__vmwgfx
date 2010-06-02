@@ -577,7 +577,9 @@ err_defio:
 #ifdef CONFIG_FB_DEFERRED_IO
 	fb_deferred_io_cleanup(info);
 #endif
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 35))
 err_aper:
+#endif
 	ttm_bo_kunmap(&par->map);
 err_unref:
 	ttm_bo_unref((struct ttm_buffer_object **)&par->vmw_bo);
