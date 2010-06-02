@@ -539,8 +539,18 @@ int vmw_fb_init(struct vmw_private *vmw_priv)
 
 #ifdef VMWGFX_HANDOVER
 	if (vmw_priv->handover) {
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 35))
+		info->apertures = alloc_apertures(1);
+		if (!info->apertures) {
+			ret = -ENOMEM;
+			goto err_aper;
+		}
+		info->apertures->ranges[0].base = vmw_priv->vram_start;
+		info->apertures->ranges[0].size = vmw_priv->vram_size;
+#else
 		info->aperture_base = vmw_priv->vram_start;
 		info->aperture_size = vmw_priv->vram_size;
+#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 34)) */
 	}
 #endif
 	/*
@@ -567,6 +577,7 @@ err_defio:
 #ifdef CONFIG_FB_DEFERRED_IO
 	fb_deferred_io_cleanup(info);
 #endif
+err_aper:
 	ttm_bo_kunmap(&par->map);
 err_unref:
 	ttm_bo_unref((struct ttm_buffer_object **)&par->vmw_bo);
