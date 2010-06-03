@@ -558,7 +558,7 @@ int vmw_fb_init(struct vmw_private *vmw_priv)
 #else
 	info->aperture_base = vmw_priv->vram_start;
 	info->aperture_size = vmw_priv->vram_size;
-#endif
+#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 35)) */
 #endif
 
 	/*
