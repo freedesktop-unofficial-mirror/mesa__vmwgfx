@@ -418,7 +418,6 @@ static int vmw_driver_load(struct drm_device *dev, unsigned long chipset)
 	}
 
 	dev_priv->pm_nb.notifier_call = vmwgfx_pm_notifier;
-	DRM_INFO("Register notifier.\n");
 	register_pm_notifier(&dev_priv->pm_nb);
 
 	return 0;
