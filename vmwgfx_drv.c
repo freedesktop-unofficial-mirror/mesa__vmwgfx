@@ -37,6 +37,13 @@
 #define VMWGFX_CHIP_SVGAII 0
 #define VMW_FB_RESERVATION 0
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 29))
+#define VMW_HAS_DEV_PM_OPS
+#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27))
+#define VMW_HAS_PM_OPS
+#endif
+
+
 /**
  * Fully encoded drm commands. Might move to vmw_drm.h
  */
@@ -833,6 +840,8 @@ static int vmwgfx_pm_notifier(struct notifier_block *nb, unsigned long val,
 		 */
 		ttm_bo_swapout_all(&dev_priv->bdev);
 
+#if !(defined(VMW_HAS_DEV_PM_OPS) || defined(VMW_HAS_PM_OPS))
+
 		/**
 		 * Release 3d reference held by fbdev and potentially
 		 * stop fifo.
@@ -841,17 +850,12 @@ static int vmwgfx_pm_notifier(struct notifier_block *nb, unsigned long val,
 		if (!dev_priv->stealth || dev_priv->handover)
 			vmw_3d_resource_dec(dev_priv);
 
+#endif
 		break;
 	case PM_POST_HIBERNATION:
 	case PM_POST_SUSPEND:
 	case PM_POST_RESTORE:
-		if (!dev_priv->suspended) {
-			printk(KERN_WARNING
-			       "[%s] Driver is not suspended at resume"
-			       " point.\n", VMWGFX_DRIVER_NAME);
-
-			break;
-		}
+#if !(defined(VMW_HAS_DEV_PM_OPS) || defined(VMW_HAS_PM_OPS))
 
 		/**
 		 * Reclaim 3d reference held by fbdev and potentially
@@ -861,6 +865,7 @@ static int vmwgfx_pm_notifier(struct notifier_block *nb, unsigned long val,
 			vmw_3d_resource_inc(dev_priv);
 
 		dev_priv->suspended = false;
+#endif
 		ttm_suspend_unlock(&vmaster->lock);
 
 		break;
@@ -876,7 +881,7 @@ static int vmwgfx_pm_notifier(struct notifier_block *nb, unsigned long val,
  * These might not be needed with the virtual SVGA device.
  */
 
-int vmw_pci_suspend(struct pci_dev *pdev, pm_message_t state)
+static int vmw_pci_suspend(struct pci_dev *pdev, pm_message_t state)
 {
 	struct drm_device *dev = pci_get_drvdata(pdev);
 	struct vmw_private *dev_priv = vmw_priv(dev);
@@ -893,12 +898,93 @@ int vmw_pci_suspend(struct pci_dev *pdev, pm_message_t state)
 	return 0;
 }
 
-int vmw_pci_resume(struct pci_dev *pdev)
+static int vmw_pci_resume(struct pci_dev *pdev)
 {
 	pci_set_power_state(pdev, PCI_D0);
 	pci_restore_state(pdev);
 	return pci_enable_device(pdev);
 }
+
+#if defined(VMW_HAS_PM_OPS) || defined(VMW_HAS_DEV_PM_OPS)
+
+static int vmw_pm_suspend(struct device *kdev)
+{
+	struct pci_dev *pdev = to_pci_dev(kdev);
+	struct pm_message dummy;
+
+	dummy.event = 0;
+
+	return vmw_pci_suspend(pdev, dummy);
+}
+
+static int vmw_pm_resume(struct device *kdev)
+{
+	struct pci_dev *pdev = to_pci_dev(kdev);
+
+	return vmw_pci_resume(pdev);
+}
+
+static int vmw_pm_prepare(struct device *kdev)
+{
+	struct pci_dev *pdev = to_pci_dev(kdev);
+	struct drm_device *dev = pci_get_drvdata(pdev);
+	struct vmw_private *dev_priv = vmw_priv(dev);
+
+	/**
+	 * Release 3d reference held by fbdev and potentially
+	 * stop fifo.
+	 */
+	dev_priv->suspended = true;
+	if (!dev_priv->stealth || dev_priv->handover)
+		vmw_3d_resource_dec(dev_priv);
+
+	if (dev_priv->num_3d_resources != 0) {
+
+		DRM_INFO("Can't suspend or hibernate "
+			 "while 3D resources are active.\n");
+
+		if (!dev_priv->stealth || dev_priv->handover)
+			vmw_3d_resource_inc(dev_priv);
+		dev_priv->suspended = false;
+		return -EBUSY;
+	}
+
+	return 0;
+}
+
+static void vmw_pm_complete(struct device *kdev)
+{
+	struct pci_dev *pdev = to_pci_dev(kdev);
+	struct drm_device *dev = pci_get_drvdata(pdev);
+	struct vmw_private *dev_priv = vmw_priv(dev);
+
+	/**
+	 * Reclaim 3d reference held by fbdev and potentially
+	 * start fifo.
+	 */
+	if (!dev_priv->stealth || dev_priv->handover)
+		vmw_3d_resource_inc(dev_priv);
+
+	dev_priv->suspended = false;
+}
+
+
+#ifdef VMW_HAS_DEV_PM_OPS
+static const struct dev_pm_ops vmw_pm_ops = {
+	.prepare = vmw_pm_prepare,
+	.complete = vmw_pm_complete,
+	.suspend = vmw_pm_suspend,
+	.resume = vmw_pm_resume,
+};
+#else
+static const struct pm_ops vmw_pm_ops = {
+	.prepare = vmw_pm_prepare,
+	.complete = vmw_pm_complete,
+	.suspend = vmw_pm_suspend,
+	.resume = vmw_pm_resume,
+};
+#endif
+#endif
 
 static struct drm_driver driver = {
 	.driver_features = DRIVER_HAVE_IRQ | DRIVER_IRQ_SHARED |
@@ -934,15 +1020,21 @@ static struct drm_driver driver = {
 #if defined(CONFIG_COMPAT) && LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 9)
 		 .compat_ioctl = drm_compat_ioctl,
 #endif
-		 },
+	},
 	.pci_driver = {
-		       .name = VMWGFX_DRIVER_NAME,
-		       .id_table = vmw_pci_id_list,
-		       .probe = vmw_probe,
-		       .remove = vmw_remove,
-		       .suspend = vmw_pci_suspend,
-		       .resume = vmw_pci_resume
-		       },
+		 .name = VMWGFX_DRIVER_NAME,
+		 .id_table = vmw_pci_id_list,
+		 .probe = vmw_probe,
+		 .remove = vmw_remove,
+#if (defined(VMW_HAS_DEV_PM_OPS) || defined(VMW_HAS_PM_OPS))
+		 .driver = {
+			 .pm = &vmw_pm_ops
+		 }
+#else
+		 .suspend = vmw_pci_suspend,
+		 .resume = vmw_pci_resume,
+#endif
+	 },
 	.name = VMWGFX_DRIVER_NAME,
 	.desc = VMWGFX_DRIVER_DESC,
 	.date = VMWGFX_DRIVER_DATE,
