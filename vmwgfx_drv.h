@@ -163,6 +163,8 @@ struct vmw_overlay;
 
 struct vmw_master {
 	struct ttm_lock lock;
+	struct mutex fb_surf_mutex;
+	struct list_head fb_surf;
 };
 
 struct vmw_vga_topology_state {
@@ -528,6 +530,7 @@ void vmw_kms_write_svga(struct vmw_private *vmw_priv,
 			unsigned bbp, unsigned depth);
 int vmw_kms_update_layout_ioctl(struct drm_device *dev, void *data,
 				struct drm_file *file_priv);
+void vmw_kms_idle_workqueues(struct vmw_master *vmaster);
 
 /**
  * Overlay control - vmwgfx_overlay.c
