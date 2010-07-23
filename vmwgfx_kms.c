@@ -1128,3 +1128,10 @@ out_unlock:
 	ttm_read_unlock(&vmaster->lock);
 	return ret;
 }
+
+bool vmw_kms_validate_mode_vram(struct vmw_private *dev_priv,
+				uint32_t pitch,
+				uint32_t height)
+{
+	return (pitch * height) < dev_priv->vram_size;
+}
