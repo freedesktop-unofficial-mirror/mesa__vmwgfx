@@ -396,12 +396,13 @@ static void vmw_framebuffer_present_fs_callback(struct work_struct *work)
 		SVGA3dCopyRect cr;
 	} *cmd;
 
-/**
- * Strictly we should take the ttm_lock in read mode before accessing
- * the fifo, to make sure the fifo is present and up. However,
- * instead we flush all workqueues under the ttm lock in exclusive mode
- * before taking down the fifo.
- */
+	/**
+	 * Strictly we should take the ttm_lock in read mode before accessing
+	 * the fifo, to make sure the fifo is present and up. However,
+	 * instead we flush all workqueues under the ttm lock in exclusive mode
+	 * before taking down the fifo.
+	 */
+
 	mutex_lock(&vfbs->work_lock);
 	if (!vfbs->present_fs)
 		goto out_unlock;
@@ -834,7 +835,7 @@ static struct drm_framebuffer *vmw_kms_fb_create(struct drm_device *dev,
 	struct vmw_framebuffer *vfb = NULL;
 	struct vmw_surface *surface = NULL;
 	struct vmw_dma_buffer *bo = NULL;
-	unsigned int required_size;
+	u64 required_size;
 	int ret;
 
 	/**
@@ -844,7 +845,7 @@ static struct drm_framebuffer *vmw_kms_fb_create(struct drm_device *dev,
 	 */
 
 	required_size = mode_cmd->pitch * mode_cmd->height;
-	if (unlikely(required_size > dev_priv->vram_size)) {
+	if (unlikely(required_size > (u64) dev_priv->vram_size)) {
 		DRM_ERROR("VRAM size is too small for requested mode.\n");
 		return NULL;
 	}
@@ -1133,5 +1134,5 @@ bool vmw_kms_validate_mode_vram(struct vmw_private *dev_priv,
 				uint32_t pitch,
 				uint32_t height)
 {
-	return (pitch * height) < dev_priv->vram_size;
+	return ((u64) pitch * (u64) height) < (u64) dev_priv->vram_size;
 }
