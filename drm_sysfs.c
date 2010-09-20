@@ -216,7 +216,11 @@ static ssize_t enabled_show(struct device *device,
 			"disabled");
 }
 
-static ssize_t edid_show(struct kobject *kobj, struct bin_attribute *attr,
+static ssize_t edid_show(
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 35)
+                         struct file *file,
+#endif
+                         struct kobject *kobj, struct bin_attribute *attr,
 			 char *buf, loff_t off, size_t count)
 {
 	struct device *connector_dev = container_of(kobj, struct device, kobj);
