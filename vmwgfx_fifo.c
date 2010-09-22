@@ -106,7 +106,6 @@ int vmw_fifo_init(struct vmw_private *dev_priv, struct vmw_fifo_state *fifo)
 	mutex_lock(&dev_priv->hw_mutex);
 	dev_priv->enable_state = vmw_read(dev_priv, SVGA_REG_ENABLE);
 	dev_priv->config_done_state = vmw_read(dev_priv, SVGA_REG_CONFIG_DONE);
-	dev_priv->traces_state = vmw_read(dev_priv, SVGA_REG_TRACES);
 	vmw_write(dev_priv, SVGA_REG_ENABLE, 1);
 
 	min = 4;
@@ -176,8 +175,6 @@ void vmw_fifo_release(struct vmw_private *dev_priv, struct vmw_fifo_state *fifo)
 		  dev_priv->config_done_state);
 	vmw_write(dev_priv, SVGA_REG_ENABLE,
 		  dev_priv->enable_state);
-	vmw_write(dev_priv, SVGA_REG_TRACES,
-		  dev_priv->traces_state);
 
 	mutex_unlock(&dev_priv->hw_mutex);
 	vmw_fence_queue_takedown(&fifo->fence_queue);
@@ -517,7 +514,6 @@ out_err:
  * Map the first page of the FIFO read-only to user-space.
  */
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26))
 static int vmw_fifo_vm_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
 {
 	int ret;
@@ -540,30 +536,6 @@ static struct vm_operations_struct vmw_fifo_vm_ops = {
 	.open = NULL,
 	.close = NULL
 };
-#else
-static unsigned long vmw_fifo_vm_nopfn(struct vm_area_struct *vma,
-				       unsigned long address)
-{
-	int ret;
-
-	if (address != vma->vm_start)
-		return NOPFN_SIGBUS;
-
-	ret = vm_insert_pfn(vma, address, vma->vm_pgoff);
-	if (likely(ret == -EBUSY || ret == 0))
-		return NOPFN_REFAULT;
-	else if (ret == -ENOMEM)
-		return NOPFN_OOM;
-
-	return NOPFN_SIGBUS;
-}
-
-static struct vm_operations_struct vmw_fifo_vm_ops = {
-	.nopfn = vmw_fifo_vm_nopfn,
-	.open = NULL,
-	.close = NULL
-};
-#endif
 
 int vmw_fifo_mmap(struct file *filp, struct vm_area_struct *vma)
 {

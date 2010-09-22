@@ -80,9 +80,9 @@ static int vmw_cmd_sid_check(struct vmw_private *dev_priv,
 
 	if (unlikely((!sw_context->sid_valid  ||
 		      *sid != sw_context->last_sid))) {
-		    int real_id;
-		    int ret = vmw_surface_check(dev_priv, sw_context->tfile,
-						*sid, &real_id);
+		int real_id;
+		int ret = vmw_surface_check(dev_priv, sw_context->tfile,
+					    *sid, &real_id);
 
 		if (unlikely(ret != 0)) {
 			DRM_ERROR("Could ot find or use surface 0x%08x "
@@ -566,13 +566,31 @@ static int vmw_validate_single_buffer(struct vmw_private *dev_priv,
 	if (vmw_dmabuf_gmr(bo) != SVGA_GMR_NULL)
 		return 0;
 
+	/**
+	 * Put BO in VRAM, only if there is space.
+	 */
+
+	ret = ttm_bo_validate(bo, &vmw_vram_sys_placement, true, false, false);
+	if (unlikely(ret == -ERESTARTSYS))
+		return ret;
+
+	/**
+	 * Otherwise, set it up as GMR.
+	 */
+
+	if (vmw_dmabuf_gmr(bo) != SVGA_GMR_NULL)
+		return 0;
+
 	ret = vmw_gmr_bind(dev_priv, bo);
 	if (likely(ret == 0 || ret == -ERESTARTSYS))
 		return ret;
 
-	ret = ttm_buffer_object_validate(bo,
-					 TTM_PL_FLAG_VRAM | TTM_PL_FLAG_CACHED,
-					 true, false);
+	/**
+	 * If that failed, try VRAM again, this time evicting
+	 * previous contents.
+	 */
+
+	ret = ttm_bo_validate(bo, &vmw_vram_placement, true, false, false);
 	return ret;
 }
 
@@ -626,6 +644,7 @@ int vmw_execbuf_ioctl(struct drm_device *dev, void *data,
 	ret = copy_from_user(cmd, user_cmd, arg->command_size);
 
 	if (unlikely(ret != 0)) {
+		ret = -EFAULT;
 		DRM_ERROR("Failed copying commands.\n");
 		goto out_commit;
 	}

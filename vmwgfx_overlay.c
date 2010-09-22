@@ -104,7 +104,7 @@ static int vmw_dmabuf_pin_in_vram(struct vmw_private *dev_priv,
 				  bool pin, bool interruptible)
 {
 	struct ttm_buffer_object *bo = &buf->base;
-	unsigned flags = 0;
+	struct ttm_placement *overlay_placement = &vmw_vram_placement;
 	int ret;
 
 	ret = ttm_read_lock(&dev_priv->active_master->lock, interruptible);
@@ -115,12 +115,10 @@ static int vmw_dmabuf_pin_in_vram(struct vmw_private *dev_priv,
 	if (unlikely(ret != 0))
 		goto err;
 
-	flags |= TTM_PL_FLAG_VRAM;
-	flags |= TTM_PL_FLAG_CACHED;
 	if (pin)
-		flags |= TTM_PL_FLAG_NO_EVICT;
+		overlay_placement = &vmw_vram_ne_placement;
 
-	ret = ttm_buffer_object_validate(bo, flags, interruptible, false);
+	ret = ttm_bo_validate(bo, overlay_placement, interruptible, false, false);
 
 	ttm_bo_unreserve(bo);
 

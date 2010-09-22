@@ -49,18 +49,6 @@
 #define VMWGFX_MAX_GMRS 2048
 #define VMWGFX_MAX_DISPLAYS 16
 
-#ifndef VMWGFX_STANDALONE
-extern int vmwgfx_init(void);
-extern void vmwgfx_exit(void);
-#endif
-
-#if  (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 31))
-#define VMWGFX_HANDOVER
-#endif
-
-/* module option to turn off 3d support */
-extern int force_no_3d;
-
 struct vmw_fpriv {
 	struct drm_master *locked_master;
 	struct ttm_object_file *tfile;
@@ -176,7 +164,7 @@ struct vmw_vga_topology_state {
 struct vmw_private {
 	struct ttm_bo_device bdev;
 	struct ttm_bo_global_ref bo_global_ref;
-	struct ttm_global_reference mem_global_ref;
+	struct drm_global_reference mem_global_ref;
 
 	struct vmw_fifo_state fifo;
 
@@ -287,9 +275,7 @@ struct vmw_private {
 	 * Operating mode.
 	 */
 
-	bool handover;
 	bool stealth;
-	bool reserved_all;
 	bool is_opened;
 
 	/**
@@ -299,9 +285,6 @@ struct vmw_private {
 	struct vmw_master *active_master;
 	struct vmw_master fbdev_master;
 	struct notifier_block pm_nb;
-
-	struct mutex release_mutex;
-	uint32_t num_3d_resources;
 };
 
 static inline struct vmw_private *vmw_priv(struct drm_device *dev)
@@ -335,9 +318,6 @@ static inline uint32_t vmw_read(struct vmw_private *dev_priv,
 	val = inl(dev_priv->io_start + VMWGFX_VALUE_PORT);
 	return val;
 }
-
-int vmw_3d_resource_inc(struct vmw_private *dev_priv);
-void vmw_3d_resource_dec(struct vmw_private *dev_priv);
 
 /**
  * GMR utilities - vmwgfx_gmr.c
@@ -381,7 +361,7 @@ extern int vmw_surface_check(struct vmw_private *dev_priv,
 extern void vmw_dmabuf_bo_free(struct ttm_buffer_object *bo);
 extern int vmw_dmabuf_init(struct vmw_private *dev_priv,
 			   struct vmw_dma_buffer *vmw_bo,
-			   size_t size, uint32_t placement,
+			   size_t size, struct ttm_placement *placement,
 			   bool interuptable,
 			   void (*bo_free) (struct ttm_buffer_object *bo));
 extern int vmw_dmabuf_alloc_ioctl(struct drm_device *dev, void *data,
@@ -449,6 +429,10 @@ extern int vmw_mmap(struct file *filp, struct vm_area_struct *vma);
  * TTM buffer object driver - vmwgfx_buffer.c
  */
 
+extern struct ttm_placement vmw_vram_placement;
+extern struct ttm_placement vmw_vram_ne_placement;
+extern struct ttm_placement vmw_vram_sys_placement;
+extern struct ttm_placement vmw_sys_placement;
 extern struct ttm_bo_driver vmw_bo_driver;
 extern int vmw_dma_quiescent(struct drm_device *dev);
 

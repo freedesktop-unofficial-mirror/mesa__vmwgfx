@@ -34,13 +34,6 @@ struct vmw_fence {
 	struct timespec submitted;
 };
 
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,28))
-static void getrawmonotonic(struct timespec *ts)
-{
-	*ts = current_kernel_time();
-}
-#endif
-
 void vmw_fence_queue_init(struct vmw_fence_queue *queue)
 {
 	INIT_LIST_HEAD(&queue->head);
@@ -77,19 +70,6 @@ int vmw_fence_push(struct vmw_fence_queue *queue,
 	return 0;
 }
 
-static struct timespec vmw_timespec_sub(struct timespec t1,
-					struct timespec t2)
-{
-	t1.tv_sec -= t2.tv_sec;
-	if (t2.tv_nsec > t1.tv_nsec) {
-		t1.tv_nsec += (1000000000L - t2.tv_nsec);
-		t1.tv_sec -= 1L;
-	} else
-		t1.tv_nsec -= t2.tv_nsec;
-
-	return t1;
-}
-
 int vmw_fence_pull(struct vmw_fence_queue *queue,
 		   uint32_t signaled_sequence)
 {
@@ -111,7 +91,7 @@ int vmw_fence_pull(struct vmw_fence_queue *queue,
 		if (signaled_sequence - fence->sequence > (1 << 30))
 			continue;
 
-		queue->lag = vmw_timespec_sub(now, fence->submitted);
+		queue->lag = timespec_sub(now, fence->submitted);
 		queue->lag_time = now;
 		updated = true;
 		list_del(&fence->head);
@@ -144,7 +124,7 @@ static struct timespec vmw_fifo_lag(struct vmw_fence_queue *queue)
 	spin_lock(&queue->lock);
 	getrawmonotonic(&now);
 	queue->lag = vmw_timespec_add(queue->lag,
-				      vmw_timespec_sub(now, queue->lag_time));
+				      timespec_sub(now, queue->lag_time));
 	queue->lag_time = now;
 	spin_unlock(&queue->lock);
 	return queue->lag;

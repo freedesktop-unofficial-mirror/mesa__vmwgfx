@@ -29,7 +29,51 @@
 #include "ttm/ttm_bo_driver.h"
 #include "ttm/ttm_placement.h"
 
-static uint32_t vmw_mem_prios[] = { TTM_PL_VRAM, TTM_PL_SYSTEM };
+static uint32_t vram_placement_flags = TTM_PL_FLAG_VRAM |
+	TTM_PL_FLAG_CACHED;
+
+static uint32_t vram_ne_placement_flags = TTM_PL_FLAG_VRAM |
+	TTM_PL_FLAG_CACHED |
+	TTM_PL_FLAG_NO_EVICT;
+
+static uint32_t sys_placement_flags = TTM_PL_FLAG_SYSTEM |
+	TTM_PL_FLAG_CACHED;
+
+struct ttm_placement vmw_vram_placement = {
+	.fpfn = 0,
+	.lpfn = 0,
+	.num_placement = 1,
+	.placement = &vram_placement_flags,
+	.num_busy_placement = 1,
+	.busy_placement = &vram_placement_flags
+};
+
+struct ttm_placement vmw_vram_sys_placement = {
+	.fpfn = 0,
+	.lpfn = 0,
+	.num_placement = 1,
+	.placement = &vram_placement_flags,
+	.num_busy_placement = 1,
+	.busy_placement = &sys_placement_flags
+};
+
+struct ttm_placement vmw_vram_ne_placement = {
+	.fpfn = 0,
+	.lpfn = 0,
+	.num_placement = 1,
+	.placement = &vram_ne_placement_flags,
+	.num_busy_placement = 1,
+	.busy_placement = &vram_ne_placement_flags
+};
+
+struct ttm_placement vmw_sys_placement = {
+	.fpfn = 0,
+	.lpfn = 0,
+	.num_placement = 1,
+	.placement = &sys_placement_flags,
+	.num_busy_placement = 1,
+	.busy_placement = &sys_placement_flags
+};
 
 struct vmw_ttm_backend {
 	struct ttm_backend backend;
@@ -93,9 +137,6 @@ int vmw_invalidate_caches(struct ttm_bo_device *bdev, uint32_t flags)
 int vmw_init_mem_type(struct ttm_bo_device *bdev, uint32_t type,
 		      struct ttm_mem_type_manager *man)
 {
-	struct vmw_private *dev_priv =
-	    container_of(bdev, struct vmw_private, bdev);
-
 	switch (type) {
 	case TTM_PL_SYSTEM:
 		/* System memory */
@@ -107,11 +148,7 @@ int vmw_init_mem_type(struct ttm_bo_device *bdev, uint32_t type,
 	case TTM_PL_VRAM:
 		/* "On-card" video ram */
 		man->gpu_offset = 0;
-		man->io_offset = dev_priv->vram_start;
-		man->io_size = dev_priv->vram_size;
-		man->flags = TTM_MEMTYPE_FLAG_FIXED |
-		    TTM_MEMTYPE_FLAG_NEEDS_IOREMAP | TTM_MEMTYPE_FLAG_MAPPABLE;
-		man->io_addr = NULL;
+		man->flags = TTM_MEMTYPE_FLAG_FIXED | TTM_MEMTYPE_FLAG_MAPPABLE;
 		man->available_caching = TTM_PL_MASK_CACHING;
 		man->default_caching = TTM_PL_FLAG_WC;
 		break;
@@ -122,9 +159,10 @@ int vmw_init_mem_type(struct ttm_bo_device *bdev, uint32_t type,
 	return 0;
 }
 
-uint32_t vmw_evict_flags(struct ttm_buffer_object *bo)
+void vmw_evict_flags(struct ttm_buffer_object *bo,
+		     struct ttm_placement *placement)
 {
-	return TTM_PL_FLAG_SYSTEM | TTM_PL_FLAG_CACHED;
+	*placement = vmw_sys_placement;
 }
 
 /**
@@ -146,6 +184,42 @@ static void vmw_move_notify(struct ttm_buffer_object *bo,
 static void vmw_swap_notify(struct ttm_buffer_object *bo)
 {
 	vmw_dmabuf_gmr_unbind(bo);
+}
+
+static int vmw_ttm_io_mem_reserve(struct ttm_bo_device *bdev, struct ttm_mem_reg *mem)
+{
+	struct ttm_mem_type_manager *man = &bdev->man[mem->mem_type];
+	struct vmw_private *dev_priv = container_of(bdev, struct vmw_private, bdev);
+
+	mem->bus.addr = NULL;
+	mem->bus.is_iomem = false;
+	mem->bus.offset = 0;
+	mem->bus.size = mem->num_pages << PAGE_SHIFT;
+	mem->bus.base = 0;
+	if (!(man->flags & TTM_MEMTYPE_FLAG_MAPPABLE))
+		return -EINVAL;
+	switch (mem->mem_type) {
+	case TTM_PL_SYSTEM:
+		/* System memory */
+		return 0;
+	case TTM_PL_VRAM:
+		mem->bus.offset = mem->mm_node->start << PAGE_SHIFT;
+		mem->bus.base = dev_priv->vram_start;
+		mem->bus.is_iomem = true;
+		break;
+	default:
+		return -EINVAL;
+	}
+	return 0;
+}
+
+static void vmw_ttm_io_mem_free(struct ttm_bo_device *bdev, struct ttm_mem_reg *mem)
+{
+}
+
+static int vmw_ttm_fault_reserve_notify(struct ttm_buffer_object *bo)
+{
+	return 0;
 }
 
 /**
@@ -191,10 +265,6 @@ static int vmw_sync_obj_wait(void *sync_obj, void *sync_arg,
 }
 
 struct ttm_bo_driver vmw_bo_driver = {
-	.mem_type_prio = vmw_mem_prios,
-	.mem_busy_prio = vmw_mem_prios,
-	.num_mem_type_prio = ARRAY_SIZE(vmw_mem_prios),
-	.num_mem_busy_prio = ARRAY_SIZE(vmw_mem_prios),
 	.create_ttm_backend_entry = vmw_ttm_backend_init,
 	.invalidate_caches = vmw_invalidate_caches,
 	.init_mem_type = vmw_init_mem_type,
@@ -207,5 +277,8 @@ struct ttm_bo_driver vmw_bo_driver = {
 	.sync_obj_unref = vmw_sync_obj_unref,
 	.sync_obj_ref = vmw_sync_obj_ref,
 	.move_notify = vmw_move_notify,
-	.swap_notify = vmw_swap_notify
+	.swap_notify = vmw_swap_notify,
+	.fault_reserve_notify = &vmw_ttm_fault_reserve_notify,
+	.io_mem_reserve = &vmw_ttm_io_mem_reserve,
+	.io_mem_free = &vmw_ttm_io_mem_free,
 };

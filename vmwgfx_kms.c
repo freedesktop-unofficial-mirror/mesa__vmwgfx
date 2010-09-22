@@ -30,6 +30,8 @@
 /* Might need a hrtimer here? */
 #define VMWGFX_PRESENT_RATE ((HZ / 60 > 0) ? HZ / 60 : 1)
 
+static int vmw_surface_dmabuf_pin(struct vmw_framebuffer *vfb);
+static int vmw_surface_dmabuf_unpin(struct vmw_framebuffer *vfb);
 
 void vmw_display_unit_cleanup(struct vmw_display_unit *du)
 {
@@ -326,6 +328,7 @@ int vmw_framebuffer_create_handle(struct drm_framebuffer *fb,
 struct vmw_framebuffer_surface {
 	struct vmw_framebuffer base;
 	struct vmw_surface *surface;
+	struct vmw_dma_buffer *buffer;
 	struct delayed_work d_work;
 	struct mutex work_lock;
 	bool present_fs;
@@ -500,8 +503,8 @@ int vmw_kms_new_framebuffer_surface(struct vmw_private *dev_priv,
 	vfbs->base.base.depth = 24;
 	vfbs->base.base.width = width;
 	vfbs->base.base.height = height;
-	vfbs->base.pin = NULL;
-	vfbs->base.unpin = NULL;
+	vfbs->base.pin = &vmw_surface_dmabuf_pin;
+	vfbs->base.unpin = &vmw_surface_dmabuf_unpin;
 	vfbs->surface = surface;
 	mutex_init(&vfbs->work_lock);
 	INIT_DELAYED_WORK(&vfbs->d_work, &vmw_framebuffer_present_fs_callback);
@@ -588,6 +591,40 @@ static struct drm_framebuffer_funcs vmw_framebuffer_dmabuf_funcs = {
 	.dirty = vmw_framebuffer_dmabuf_dirty,
 	.create_handle = vmw_framebuffer_create_handle,
 };
+
+static int vmw_surface_dmabuf_pin(struct vmw_framebuffer *vfb)
+{
+	struct vmw_private *dev_priv = vmw_priv(vfb->base.dev);
+	struct vmw_framebuffer_surface *vfbs =
+		vmw_framebuffer_to_vfbs(&vfb->base);
+	unsigned long size = vfbs->base.base.pitch * vfbs->base.base.height;
+	int ret;
+
+	vfbs->buffer = kzalloc(sizeof(*vfbs->buffer), GFP_KERNEL);
+	if (unlikely(vfbs->buffer == NULL))
+		return -ENOMEM;
+
+	vmw_overlay_pause_all(dev_priv);
+	ret = vmw_dmabuf_init(dev_priv, vfbs->buffer, size,
+			       &vmw_vram_ne_placement,
+			       false, &vmw_dmabuf_bo_free);
+	vmw_overlay_resume_all(dev_priv);
+
+	return ret;
+}
+
+static int vmw_surface_dmabuf_unpin(struct vmw_framebuffer *vfb)
+{
+	struct ttm_buffer_object *bo;
+	struct vmw_framebuffer_surface *vfbs =
+		vmw_framebuffer_to_vfbs(&vfb->base);
+
+	bo = &vfbs->buffer->base;
+	ttm_bo_unref(&bo);
+	vfbs->buffer = NULL;
+
+	return 0;
+}
 
 static int vmw_framebuffer_dmabuf_pin(struct vmw_framebuffer *vfb)
 {
@@ -734,14 +771,8 @@ err_not_scanout:
 	return NULL;
 }
 
-static int vmw_kms_fb_changed(struct drm_device *dev)
-{
-	return 0;
-}
-
 static struct drm_mode_config_funcs vmw_kms_funcs = {
 	.fb_create = vmw_kms_fb_create,
-	.fb_changed = vmw_kms_fb_changed,
 };
 
 int vmw_kms_init(struct vmw_private *dev_priv)
@@ -846,7 +877,8 @@ int vmw_kms_save_vga(struct vmw_private *vmw_priv)
 	vmw_priv->vga_blue_mask = vmw_read(vmw_priv, SVGA_REG_BLUE_MASK);
 	vmw_priv->vga_green_mask = vmw_read(vmw_priv, SVGA_REG_GREEN_MASK);
 	if (vmw_priv->capabilities & SVGA_CAP_PITCHLOCK)
-		vmw_priv->vga_pitchlock = vmw_read(vmw_priv, SVGA_REG_PITCHLOCK);
+		vmw_priv->vga_pitchlock =
+		  vmw_read(vmw_priv, SVGA_REG_PITCHLOCK);
 	else if (vmw_fifo_have_pitchlock(vmw_priv))
 		vmw_priv->vga_pitchlock = ioread32(vmw_priv->mmio_virt +
 						       SVGA_FIFO_PITCHLOCK);
@@ -884,9 +916,11 @@ int vmw_kms_restore_vga(struct vmw_private *vmw_priv)
 	vmw_write(vmw_priv, SVGA_REG_GREEN_MASK, vmw_priv->vga_green_mask);
 	vmw_write(vmw_priv, SVGA_REG_BLUE_MASK, vmw_priv->vga_blue_mask);
 	if (vmw_priv->capabilities & SVGA_CAP_PITCHLOCK)
-		vmw_write(vmw_priv, SVGA_REG_PITCHLOCK, vmw_priv->vga_pitchlock);
+		vmw_write(vmw_priv, SVGA_REG_PITCHLOCK,
+			  vmw_priv->vga_pitchlock);
 	else if (vmw_fifo_have_pitchlock(vmw_priv))
-		iowrite32(vmw_priv->vga_pitchlock, vmw_priv->mmio_virt + SVGA_FIFO_PITCHLOCK);
+		iowrite32(vmw_priv->vga_pitchlock,
+			  vmw_priv->mmio_virt + SVGA_FIFO_PITCHLOCK);
 
 	if (!(vmw_priv->capabilities & SVGA_CAP_DISPLAY_TOPOLOGY))
 		return 0;
@@ -909,7 +943,8 @@ int vmw_kms_update_layout_ioctl(struct drm_device *dev, void *data,
 				struct drm_file *file_priv)
 {
 	struct vmw_private *dev_priv = vmw_priv(dev);
-	struct drm_vmw_update_layout_arg *arg = (struct drm_vmw_update_layout_arg *)data;
+	struct drm_vmw_update_layout_arg *arg =
+		(struct drm_vmw_update_layout_arg *)data;
 	struct vmw_master *vmaster = vmw_master(file_priv->master);
 	void __user *user_rects;
 	struct drm_vmw_rect *rects;
@@ -937,6 +972,7 @@ int vmw_kms_update_layout_ioctl(struct drm_device *dev, void *data,
 	ret = copy_from_user(rects, user_rects, rects_size);
 	if (unlikely(ret != 0)) {
 		DRM_ERROR("Failed to get rects.\n");
+		ret = -EFAULT;
 		goto out_free;
 	}
 

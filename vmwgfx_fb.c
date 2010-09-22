@@ -60,9 +60,6 @@ struct vmw_fb_par {
 		unsigned y1;
 		unsigned x2;
 		unsigned y2;
-#ifndef CONFIG_FB_DEFERRED_IO
-		struct delayed_work work;
-#endif
 	} dirty;
 };
 
@@ -170,7 +167,7 @@ static int vmw_fb_set_par(struct fb_info *info)
 		vmw_write(vmw_priv, SVGA_REG_DISPLAY_ID, SVGA_ID_INVALID);
 	}
 
-	/* This is really helpfull as if this is fails the user
+	/* This is really helpful since if this fails the user
 	 * can probably not see anything on the screen.
 	 */
 	WARN_ON(vmw_read(vmw_priv, SVGA_REG_FB_OFFSET) != 0);
@@ -259,16 +256,10 @@ static void vmw_fb_dirty_mark(struct vmw_fb_par *par,
 		par->dirty.y1 = y1;
 		par->dirty.x2 = x2;
 		par->dirty.y2 = y2;
-
-		/* if we are active start the dirty work */
+		/* if we are active start the dirty work
+		 * we share the work with the defio system */
 		if (par->dirty.active)
-#ifdef CONFIG_FB_DEFERRED_IO
-			/* we share the work with the defio system */
 			schedule_delayed_work(&info->deferred_work, VMW_DIRTY_DELAY);
-#else
-			schedule_delayed_work(&par->dirty.work, VMW_DIRTY_DELAY);
-		(void)info;
-#endif
 	} else {
 		if (x1 < par->dirty.x1)
 			par->dirty.x1 = x1;
@@ -282,7 +273,6 @@ static void vmw_fb_dirty_mark(struct vmw_fb_par *par,
 	spin_unlock_irqrestore(&par->dirty.lock, flags);
 }
 
-#ifdef CONFIG_FB_DEFERRED_IO
 static void vmw_deferred_io(struct fb_info *info,
 			    struct list_head *pagelist)
 {
@@ -320,14 +310,6 @@ struct fb_deferred_io vmw_defio = {
 	.delay		= VMW_DIRTY_DELAY,
 	.deferred_io	= vmw_deferred_io,
 };
-#else
-static void vmw_fb_dirty_work(struct work_struct *work)
-{
-	struct vmw_fb_par *par = container_of(work, struct vmw_fb_par,
-					      dirty.work.work);
-	vmw_fb_dirty_flush(par);
-}
-#endif
 
 /*
  * Draw code
@@ -374,25 +356,22 @@ static int vmw_fb_create_bo(struct vmw_private *vmw_priv,
 			    size_t size, struct vmw_dma_buffer **out)
 {
 	struct vmw_dma_buffer *vmw_bo;
+	struct ttm_placement ne_placement = vmw_vram_ne_placement;
 	int ret;
+
+	ne_placement.lpfn = (size + PAGE_SIZE - 1) >> PAGE_SHIFT;
 
 	/* interuptable? */
 	ret = ttm_write_lock(&vmw_priv->fbdev_master.lock, false);
 	if (unlikely(ret != 0))
 		return ret;
 
-	ret = ttm_bo_evict_mm(&vmw_priv->bdev, TTM_PL_VRAM);
-	if (unlikely(ret != 0))
-		goto err_unlock;
-
 	vmw_bo = kmalloc(sizeof(*vmw_bo), GFP_KERNEL);
 	if (!vmw_bo)
 		goto err_unlock;
 
 	ret = vmw_dmabuf_init(vmw_priv, vmw_bo, size,
-			      TTM_PL_FLAG_VRAM |
-			      TTM_PL_FLAG_CACHED |
-			      TTM_PL_FLAG_NO_EVICT,
+			      &ne_placement,
 			      false,
 			      &vmw_dmabuf_bo_free);
 	if (unlikely(ret != 0))
@@ -419,14 +398,14 @@ int vmw_fb_init(struct vmw_private *vmw_priv)
 	unsigned fb_bbp, fb_depth, fb_offset, fb_pitch, fb_size;
 	int ret;
 
-	/* XXX these shouldn't be hardcoded */
+	/* XXX These shouldn't be hardcoded. */
 	initial_width = 800;
 	initial_height = 600;
 
 	fb_bbp = 32;
 	fb_depth = 24;
 
-	/* XXX as shouldn't these be as well */
+	/* XXX As shouldn't these be as well. */
 	fb_width = min(vmw_priv->fb_max_width, (unsigned)2048);
 	fb_height = min(vmw_priv->fb_max_height, (unsigned)2048);
 
@@ -537,25 +516,23 @@ int vmw_fb_init(struct vmw_private *vmw_priv)
 	info->pixmap.scan_align = 1;
 #endif
 
-#ifdef VMWGFX_HANDOVER
-	if (vmw_priv->handover) {
-		info->aperture_base = vmw_priv->vram_start;
-		info->aperture_size = vmw_priv->vram_size;
+	info->apertures = alloc_apertures(1);
+	if (!info->apertures) {
+		ret = -ENOMEM;
+		goto err_aper;
 	}
-#endif
+	info->apertures->ranges[0].base = vmw_priv->vram_start;
+	info->apertures->ranges[0].size = vmw_priv->vram_size;
+
 	/*
 	 * Dirty & Deferred IO
 	 */
 	par->dirty.x1 = par->dirty.x2 = 0;
-	par->dirty.y1 = par->dirty.y1 = 0;
+	par->dirty.y1 = par->dirty.y2 = 0;
 	par->dirty.active = true;
 	spin_lock_init(&par->dirty.lock);
-#ifdef CONFIG_FB_DEFERRED_IO
 	info->fbdefio = &vmw_defio;
 	fb_deferred_io_init(info);
-#else
-	INIT_DELAYED_WORK(&par->dirty.work, vmw_fb_dirty_work);
-#endif
 
 	ret = register_framebuffer(info);
 	if (unlikely(ret != 0))
@@ -564,9 +541,8 @@ int vmw_fb_init(struct vmw_private *vmw_priv)
 	return 0;
 
 err_defio:
-#ifdef CONFIG_FB_DEFERRED_IO
 	fb_deferred_io_cleanup(info);
-#endif
+err_aper:
 	ttm_bo_kunmap(&par->map);
 err_unref:
 	ttm_bo_unref((struct ttm_buffer_object **)&par->vmw_bo);
@@ -592,16 +568,9 @@ int vmw_fb_close(struct vmw_private *vmw_priv)
 	bo = &par->vmw_bo->base;
 	par->vmw_bo = NULL;
 
-#ifdef CONFIG_FB_DEFERRED_IO
 	/* ??? order */
 	fb_deferred_io_cleanup(info);
-#endif
 	unregister_framebuffer(info);
-
-#ifndef CONFIG_FB_DEFERRED_IO
-	cancel_delayed_work(&par->dirty.work);
-	flush_scheduled_work();
-#endif
 
 	ttm_bo_kunmap(&par->map);
 	ttm_bo_unref(&bo);
@@ -622,12 +591,7 @@ int vmw_dmabuf_from_vram(struct vmw_private *vmw_priv,
 	if (unlikely(ret != 0))
 		return ret;
 
-	ret = ttm_buffer_object_validate(bo,
-					 TTM_PL_FLAG_SYSTEM |
-					 TTM_PL_FLAG_CACHED,
-					 false,
-					 false);
-
+	ret = ttm_bo_validate(bo, &vmw_sys_placement, false, false, false);
 	ttm_bo_unreserve(bo);
 
 	return ret;
@@ -637,29 +601,23 @@ int vmw_dmabuf_to_start_of_vram(struct vmw_private *vmw_priv,
 				struct vmw_dma_buffer *vmw_bo)
 {
 	struct ttm_buffer_object *bo = &vmw_bo->base;
+	struct ttm_placement ne_placement = vmw_vram_ne_placement;
 	int ret = 0;
+
+	ne_placement.lpfn = bo->num_pages;
 
 	/* interuptable? */
 	ret = ttm_write_lock(&vmw_priv->active_master->lock, false);
 	if (unlikely(ret != 0))
 		return ret;
 
-	ret = ttm_bo_evict_mm(&vmw_priv->bdev, TTM_PL_VRAM);
-	if (unlikely(ret != 0))
-		goto err_unlock;
-
 	ret = ttm_bo_reserve(bo, false, false, false, 0);
 	if (unlikely(ret != 0))
 		goto err_unlock;
 
-	ret = ttm_buffer_object_validate(bo,
-					 TTM_PL_FLAG_VRAM |
-					 TTM_PL_FLAG_CACHED |
-					 TTM_PL_FLAG_NO_EVICT,
-					 false,
-					 false);
+	ret = ttm_bo_validate(bo, &ne_placement, false, false, false);
 
-	/* could probably bug on */
+	/* Could probably bug on */
 	WARN_ON(bo->offset != 0);
 
 	ttm_bo_unreserve(bo);
@@ -740,11 +698,7 @@ err_no_buffer:
 
 	/* If there already was stuff dirty we wont
 	 * schedule a new work, so lets do it now */
-#ifdef CONFIG_FB_DEFERRED_IO
 	schedule_delayed_work(&info->deferred_work, 0);
-#else
-	schedule_delayed_work(&par->dirty.work, 0);
-#endif
 
 	return 0;
 }

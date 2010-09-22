@@ -126,8 +126,9 @@ static int vmw_ldu_commit_list(struct vmw_private *dev_priv)
 				   fb->bits_per_pixel, fb->depth);
 	}
 
-	/* Make sure we always show something */
-	vmw_write(dev_priv, SVGA_REG_NUM_GUEST_DISPLAYS, lds->num_active ? lds->num_active : 1);
+	/* Make sure we always show something. */
+	vmw_write(dev_priv, SVGA_REG_NUM_GUEST_DISPLAYS,
+		  lds->num_active ? lds->num_active : 1);
 
 	i = 0;
 	list_for_each_entry(entry, &lds->active, active) {
@@ -158,7 +159,7 @@ static int vmw_ldu_del_active(struct vmw_private *vmw_priv,
 	if (list_empty(&ldu->active))
 		return 0;
 
-	/* must init otherwise list_empty(&ldu->active) well not work */
+	/* Must init otherwise list_empty(&ldu->active) will not work. */
 	list_del_init(&ldu->active);
 	if (--(ld->num_active) == 0) {
 		BUG_ON(!ld->fb);
@@ -242,7 +243,8 @@ static int vmw_ldu_crtc_set_config(struct drm_mode_set *set)
 
 	/* ldu only supports one fb active at the time */
 	if (dev_priv->ldu_priv->fb && vfb &&
-	    !(dev_priv->ldu_priv->num_active == 1 && !list_empty(&ldu->active)) &&
+	    !(dev_priv->ldu_priv->num_active == 1 &&
+	      !list_empty(&ldu->active)) &&
 	    dev_priv->ldu_priv->fb != vfb) {
 		DRM_ERROR("Multiple framebuffers not supported\n");
 		return -EINVAL;
@@ -423,7 +425,7 @@ static int vmw_ldu_connector_fill_modes(struct drm_connector *connector,
 	struct vmw_legacy_display_unit *ldu = vmw_connector_to_ldu(connector);
 	struct drm_device *dev = connector->dev;
 	struct drm_display_mode *mode = NULL;
-        struct drm_display_mode prefmode = { DRM_MODE("preferred",
+	struct drm_display_mode prefmode = { DRM_MODE("preferred",
 		DRM_MODE_TYPE_DRIVER | DRM_MODE_TYPE_PREFERRED,
 		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 		DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_PVSYNC)
@@ -590,8 +592,9 @@ int vmw_kms_ldu_update_layout(struct vmw_private *dev_priv, unsigned num,
 #if 0
 	DRM_INFO("%s: new layout ", __func__);
 	for (i = 0; i < (int)num; i++)
-		printk("(%i, %i %ux%u) ", rects[i].x, rects[i].y, rects[i].w, rects[i].h);
-	printk("\n");
+		DRM_INFO("(%i, %i %ux%u) ", rects[i].x, rects[i].y,
+			 rects[i].w, rects[i].h);
+	DRM_INFO("\n");
 #else
 	(void)i;
 #endif
