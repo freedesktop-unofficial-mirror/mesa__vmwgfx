@@ -126,7 +126,11 @@ static struct attribute *ttm_bo_global_attrs[] = {
 	NULL
 };
 
+#if (defined(TTM_STANDALONE) && !defined(TTM_HAVE_CSO))
+static struct sysfs_ops ttm_bo_global_ops = {
+#else
 static const struct sysfs_ops ttm_bo_global_ops = {
+#endif
 	.show = &ttm_bo_global_show
 };
 

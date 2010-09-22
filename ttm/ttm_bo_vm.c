@@ -69,6 +69,7 @@ static struct ttm_buffer_object *ttm_bo_vm_lookup_rb(struct ttm_bo_device *bdev,
 	return best_bo;
 }
 
+#if !defined(TTM_HAVE_NOPFN)
 static int ttm_bo_vm_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
 {
 	struct ttm_buffer_object *bo = (struct ttm_buffer_object *)
@@ -213,6 +214,144 @@ out_unlock:
 	return retval;
 }
 
+#else
+
+static unsigned long ttm_bo_vm_nopfn(struct vm_area_struct *vma,
+				     unsigned long address)
+{
+	struct ttm_buffer_object *bo = (struct ttm_buffer_object *)
+	    vma->vm_private_data;
+	struct ttm_bo_device *bdev = bo->bdev;
+	unsigned long page_offset;
+	unsigned long page_last;
+	unsigned long pfn;
+	struct ttm_tt *ttm = NULL;
+	struct page *page;
+	int ret;
+	int i;
+	unsigned long retval = NOPFN_REFAULT;
+
+	/*
+	 * Work around locking order reversal in fault / nopfn
+	 * between mmap_sem and bo_reserve: Perform a trylock operation
+	 * for reserve, and if it fails, retry the fault after scheduling.
+	 */
+
+	ret = ttm_bo_reserve(bo, true, true, false, 0);
+	if (unlikely(ret != 0)) {
+		if (ret == -EBUSY)
+			set_need_resched();
+		return NOPFN_REFAULT;
+	}
+
+	/*
+	 * Wait for buffer data in transit, due to a pipelined
+	 * move.
+	 */
+	spin_lock(&bo->lock);
+	if (test_bit(TTM_BO_PRIV_FLAG_MOVING, &bo->priv_flags)) {
+		ret = ttm_bo_wait(bo, false, true, false);
+		spin_unlock(&bo->lock);
+		if (unlikely(ret != 0)) {
+			retval = (ret != -ERESTART) ?
+			    NOPFN_SIGBUS : NOPFN_REFAULT;
+			goto out_unlock;
+		}
+	} else
+		spin_unlock(&bo->lock);
+
+	ret = ttm_mem_io_reserve(bdev, &bo->mem);
+	if (unlikely(ret != 0)) {
+		retval = NOPFN_SIGBUS;
+		goto out_unlock;
+	}
+
+	page_offset = ((address - vma->vm_start) >> PAGE_SHIFT) +
+	    bo->vm_node->start - vma->vm_pgoff;
+
+	page_last = ((vma->vm_end - vma->vm_start) >> PAGE_SHIFT) +
+	    bo->vm_node->start - vma->vm_pgoff;
+
+	if (unlikely(page_offset >= bo->num_pages)) {
+		printk(KERN_ERR TTM_PFX "Attempted buffer object access "
+		       "outside object.\n");
+		retval = NOPFN_SIGBUS;
+		goto out_unlock;
+	}
+
+	/*
+	 * Strictly, we're not allowed to modify vma->vm_page_prot here,
+	 * since the mmap_sem is only held in read mode. However, we
+	 * modify only the caching bits of vma->vm_page_prot and
+	 * consider those bits protected by
+	 * the bo->mutex, as we should be the only writers.
+	 * There shouldn't really be any readers of these bits except
+	 * within vm_insert_mixed()? fork?
+	 *
+	 * TODO: Add a list of vmas to the bo, and change the
+	 * vma->vm_page_prot when the object changes caching policy, with
+	 * the correct locks held.
+	 */
+
+	if (bo->mem.bus.is_iomem) {
+		vma->vm_page_prot = ttm_io_prot(bo->mem.placement,
+						vma->vm_page_prot);
+	} else {
+		ttm = bo->ttm;
+		vma->vm_page_prot = (bo->mem.placement & TTM_PL_FLAG_CACHED) ?
+		    vm_get_page_prot(vma->vm_flags) :
+		    ttm_io_prot(bo->mem.placement, vma->vm_page_prot);
+	}
+
+	/*
+	 * Speculatively prefault a number of pages. Only error on
+	 * first page.
+	 */
+
+	for (i = 0; i < TTM_BO_VM_NUM_PREFAULT; ++i) {
+
+		if (bo->mem.bus.is_iomem)
+			pfn = ((bo->mem.bus.base + bo->mem.bus.offset) >>
+			       PAGE_SHIFT) + page_offset;
+		else {
+			page = ttm_tt_get_page(ttm, page_offset);
+			if (unlikely(!page && i == 0)) {
+				retval = NOPFN_OOM;
+				goto out_unlock;
+			} else if (unlikely(!page)) {
+				break;
+			}
+			pfn = page_to_pfn(page);
+		}
+
+		ret = vm_insert_pfn(vma, address, pfn);
+		if (unlikely(ret == -EBUSY || (ret != 0 && i != 0)))
+			break;
+
+		/*
+		 * Somebody beat us to this PTE or prefaulting to
+		 * an already populated PTE, or prefaulting error.
+		 */
+
+		if (unlikely((ret == -EBUSY) || (ret != 0 && i > 0)))
+			break;
+		else if (unlikely(ret != 0)) {
+			retval =
+			    (ret == -ENOMEM) ? VM_FAULT_OOM : VM_FAULT_SIGBUS;
+			goto out_unlock;
+		}
+
+		address += PAGE_SIZE;
+		if (unlikely(++page_offset >= page_last))
+			break;
+	}
+
+      out_unlock:
+	ttm_bo_unreserve(bo);
+	return retval;
+}
+#endif
+
 static void ttm_bo_vm_open(struct vm_area_struct *vma)
 {
 	struct ttm_buffer_object *bo =
@@ -229,8 +368,16 @@ static void ttm_bo_vm_close(struct vm_area_struct *vma)
 	vma->vm_private_data = NULL;
 }
 
+#if defined(TTM_STANDALONE) && !defined(TTM_HAVE_CVOS)
+static struct vm_operations_struct ttm_bo_vm_ops = {
+#else
 static const struct vm_operations_struct ttm_bo_vm_ops = {
+#endif
+#ifndef TTM_HAVE_NOPFN
 	.fault = ttm_bo_vm_fault,
+#else
+	.nopfn = ttm_bo_vm_nopfn,
+#endif
 	.open = ttm_bo_vm_open,
 	.close = ttm_bo_vm_close
 };

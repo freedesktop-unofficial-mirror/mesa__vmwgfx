@@ -204,7 +204,11 @@ static ssize_t ttm_pool_show(struct kobject *kobj,
 	return snprintf(buffer, PAGE_SIZE, "%u\n", val);
 }
 
+#if (defined(TTM_STANDALONE) && !defined(TTM_HAVE_CSO))
+static struct sysfs_ops ttm_pool_sysfs_ops = {
+#else
 static const struct sysfs_ops ttm_pool_sysfs_ops = {
+#endif
 	.show = &ttm_pool_show,
 	.store = &ttm_pool_store,
 };
@@ -380,6 +384,8 @@ out:
 	return nr_free;
 }
 
+#ifndef TTM_STANDALONE
+
 /* Get good estimation how many pages are free in pools */
 static int ttm_pool_get_num_unused_pages(void)
 {
@@ -425,6 +431,17 @@ static void ttm_pool_mm_shrink_fini(struct ttm_pool_manager *manager)
 {
 	unregister_shrinker(&manager->mm_shrink);
 }
+#else
+static void ttm_pool_mm_shrink_init(struct ttm_pool_manager *manager)
+{
+	;
+}
+
+static void ttm_pool_mm_shrink_fini(struct ttm_pool_manager *manager)
+{
+	;
+}
+#endif
 
 static int ttm_set_pages_caching(struct page **pages,
 		enum ttm_caching_state cstate, unsigned cpages)

@@ -32,6 +32,7 @@
 #define _TTM_MODULE_H_
 
 #include <linux/kernel.h>
+#include "vmwgfx_compat.h"
 struct kobject;
 
 #define TTM_PFX "[TTM] "

@@ -62,7 +62,11 @@ struct kobject *ttm_get_kobj(void)
 	return kobj;
 }
 
+#ifdef TTM_STANDALONE
+int ttm_init(void)
+#else
 static int __init ttm_init(void)
+#endif
 {
 	int ret;
 
@@ -82,7 +86,11 @@ out_no_dev_reg:
 	return ret;
 }
 
+#ifdef TTM_STANDALONE
+void ttm_exit(void)
+#else
 static void __exit ttm_exit(void)
+#endif
 {
 	drm_class_device_unregister(&ttm_drm_class_device);
 
@@ -94,9 +102,11 @@ static void __exit ttm_exit(void)
 	wait_event(exit_q, atomic_read(&device_released) == 1);
 }
 
+#ifndef TTM_STANDALONE
 module_init(ttm_init);
 module_exit(ttm_exit);
 
 MODULE_AUTHOR("Thomas Hellstrom, Jerome Glisse");
 MODULE_DESCRIPTION("TTM memory manager subsystem (for DRM device)");
 MODULE_LICENSE("GPL and additional rights");
+#endif

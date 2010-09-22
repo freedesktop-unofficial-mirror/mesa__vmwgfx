@@ -154,7 +154,11 @@ static struct attribute *ttm_mem_zone_attrs[] = {
 	NULL
 };
 
+#if (defined(TTM_STANDALONE) && !defined(TTM_HAVE_CSO))
+static struct sysfs_ops ttm_mem_zone_ops = {
+#else
 static const struct sysfs_ops ttm_mem_zone_ops = {
+#endif
 	.show = &ttm_mem_zone_show,
 	.store = &ttm_mem_zone_store
 };
