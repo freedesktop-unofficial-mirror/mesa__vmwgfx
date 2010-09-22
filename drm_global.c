@@ -32,6 +32,7 @@
 #include <linux/slab.h>
 #include <linux/module.h>
 #include "drm_global.h"
+#include "vmwgfx_compat.h"
 
 struct drm_global_item {
 	struct mutex mutex;

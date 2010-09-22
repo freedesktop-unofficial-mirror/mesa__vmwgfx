@@ -29,6 +29,7 @@
  */
 
 #include "drmP.h"
+#include "vmwgfx_compat.h"
 
 #if defined(CONFIG_X86)
 static void
@@ -57,11 +58,13 @@ static void drm_cache_flush_clflush(struct page *pages[],
 	mb();
 }
 
+#ifndef VMWGFX_STANDALONE
 static void
 drm_clflush_ipi_handler(void *null)
 {
 	wbinvd();
 }
+#endif
 #endif
 
 void
@@ -73,10 +76,13 @@ drm_clflush_pages(struct page *pages[], unsigned long num_pages)
 		drm_cache_flush_clflush(pages, num_pages);
 		return;
 	}
-
+#ifndef VMWGFX_STANDALONE
 	if (on_each_cpu(drm_clflush_ipi_handler, NULL, 1) != 0)
 		printk(KERN_ERR "Timed out waiting for cache flush.\n");
-
+#else
+	BUG();
+	return;
+#endif
 #elif defined(__powerpc__)
 	unsigned long i;
 	for (i = 0; i < num_pages; i++) {
