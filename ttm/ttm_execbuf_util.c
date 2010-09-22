@@ -45,6 +45,7 @@ void ttm_eu_backoff_reservation(struct list_head *list)
 		ttm_bo_unreserve(bo);
 	}
 }
+EXPORT_SYMBOL(ttm_eu_backoff_reservation);
 
 /*
  * Reserve buffers for validation.
@@ -91,6 +92,7 @@ retry:
 	}
 	return 0;
 }
+EXPORT_SYMBOL(ttm_eu_reserve_buffers);
 
 void ttm_eu_fence_buffer_objects(struct list_head *list, void *sync_obj)
 {
@@ -112,3 +114,4 @@ void ttm_eu_fence_buffer_objects(struct list_head *list, void *sync_obj)
 			driver->sync_obj_unref(&old_sync_obj);
 	}
 }
+EXPORT_SYMBOL(ttm_eu_fence_buffer_objects);

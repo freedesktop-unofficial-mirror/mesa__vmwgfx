@@ -28,7 +28,8 @@
  * Authors: Thomas Hellstrom <thellstrom-at-vmware-dot-com>
  */
 
-/** @file ttm_lock.h * This file implements a simple replacement for the buffer manager use
+/** @file ttm_lock.h
+ * This file implements a simple replacement for the buffer manager use
  * of the DRM heavyweight hardware lock.
  * The lock is a read-write lock. Taking it in read mode and write mode
  * is relatively fast, and intended for in-kernel use only.

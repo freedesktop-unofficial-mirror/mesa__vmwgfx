@@ -1,1 +1,0 @@
-ttm/ttm_global.c
