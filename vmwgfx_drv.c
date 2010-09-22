@@ -26,6 +26,7 @@
  **************************************************************************/
 
 #include "drmP.h"
+#include "drm_global.h"
 #include "vmwgfx_drv.h"
 #include "ttm/ttm_placement.h"
 #include "ttm/ttm_bo_driver.h"
@@ -507,7 +508,19 @@ static long vmw_unlocked_ioctl(struct file *filp, unsigned int cmd,
 		}
 	}
 
+#ifndef VMWGFX_STANDALONE
 	return drm_ioctl(filp, cmd, arg);
+#else
+	{
+		int ret;
+
+		lock_kernel();
+		ret = drm_ioctl(filp->f_path.dentry->d_inode, filp, cmd, arg);
+		unlock_kernel();
+
+		return ret;
+	}
+#endif
 }
 
 static int vmw_firstopen(struct drm_device *dev)
@@ -770,15 +783,49 @@ static int vmw_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 static int __init vmwgfx_init(void)
 {
 	int ret;
+
+#ifdef VMWGFX_STANDALONE
+	drm_global_init();
+	ret = drm_core_init();
+	if (ret) {
+		DRM_ERROR("Failed initializing DRM core.\n");
+		return ret;
+	}
+	ret = ttm_init();
+	if (ret) {
+		DRM_ERROR("Failed initializing TTM core.\n");
+		goto out_no_ttm;
+	}
+	ret = drm_init(&driver);
+	if (ret) {
+		DRM_ERROR("Failed initializing DRM.\n");
+		goto out_no_drm;
+	}
+	return 0;
+
+out_no_drm:
+	ttm_exit();
+out_no_ttm:
+	drm_core_exit();
+	return ret;
+#else
 	ret = drm_init(&driver);
 	if (ret)
 		DRM_ERROR("Failed initializing DRM.\n");
 	return ret;
+#endif
 }
 
 static void __exit vmwgfx_exit(void)
 {
 	drm_exit(&driver);
+#ifdef VMWGFX_STANDALONE
+	drm_exit(&driver);
+	DRM_INFO("TTM exit\n");
+	ttm_exit();
+	DRM_INFO("DRM core exit\n");
+	drm_core_exit();
+#endif
 }
 
 module_init(vmwgfx_init);

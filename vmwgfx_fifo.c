@@ -513,7 +513,7 @@ out_err:
 /**
  * Map the first page of the FIFO read-only to user-space.
  */
-
+#if (!defined(VMWGFX_STANDALONE) || !defined(VMWGFX_HAVE_NOPFN))
 static int vmw_fifo_vm_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
 {
 	int ret;
@@ -536,6 +536,30 @@ static struct vm_operations_struct vmw_fifo_vm_ops = {
 	.open = NULL,
 	.close = NULL
 };
+#else
+static unsigned long vmw_fifo_vm_nopfn(struct vm_area_struct *vma,
+				       unsigned long address)
+{
+	int ret;
+
+	if (address != vma->vm_start)
+		return NOPFN_SIGBUS;
+
+	ret = vm_insert_pfn(vma, address, vma->vm_pgoff);
+	if (likely(ret == -EBUSY || ret == 0))
+		return NOPFN_REFAULT;
+	else if (ret == -ENOMEM)
+		return NOPFN_OOM;
+
+	return NOPFN_SIGBUS;
+}
+
+static struct vm_operations_struct vmw_fifo_vm_ops = {
+	.nopfn = vmw_fifo_vm_nopfn,
+	.open = NULL,
+	.close = NULL
+};
+#endif
 
 int vmw_fifo_mmap(struct file *filp, struct vm_area_struct *vma)
 {

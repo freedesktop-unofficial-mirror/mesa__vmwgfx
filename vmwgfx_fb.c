@@ -34,6 +34,12 @@
 #define VMW_DIRTY_DELAY (HZ / 30)
 
 struct vmw_fb_par {
+#if (defined(VMWGFX_STANDALONE) && defined(VMWGFX_FB_DEFERRED))
+	/**
+	 * Must be the first member of the struct.
+	 */
+	struct vmw_fb_deferred_par def_par;
+#endif
 	struct vmw_private *vmw_priv;
 
 	void *vmalloc;
@@ -250,6 +256,9 @@ static void vmw_fb_dirty_mark(struct vmw_fb_par *par,
 	unsigned x2 = x1 + width;
 	unsigned y2 = y1 + height;
 
+#if (defined(VMWGFX_STANDALONE) && defined(VMWGFX_FB_DEFERRED))
+	(void) info;
+#endif
 	spin_lock_irqsave(&par->dirty.lock, flags);
 	if (par->dirty.x1 == par->dirty.x2) {
 		par->dirty.x1 = x1;
@@ -259,7 +268,11 @@ static void vmw_fb_dirty_mark(struct vmw_fb_par *par,
 		/* if we are active start the dirty work
 		 * we share the work with the defio system */
 		if (par->dirty.active)
+#if (defined(VMWGFX_STANDALONE) && defined(VMWGFX_FB_DEFERRED))
+			schedule_delayed_work(&par->def_par.deferred_work, VMW_DIRTY_DELAY);
+#else
 			schedule_delayed_work(&info->deferred_work, VMW_DIRTY_DELAY);
+#endif
 	} else {
 		if (x1 < par->dirty.x1)
 			par->dirty.x1 = x1;
@@ -273,10 +286,20 @@ static void vmw_fb_dirty_mark(struct vmw_fb_par *par,
 	spin_unlock_irqrestore(&par->dirty.lock, flags);
 }
 
+#if (defined(VMWGFX_STANDALONE) && defined(VMWGFX_FB_DEFERRED))
+static void vmw_deferred_io(struct vmw_fb_deferred_par *def_par,
+			    struct list_head *pagelist)
+{
+	struct vmw_fb_par *par = container_of(def_par,
+					      struct vmw_fb_par,
+					      def_par);
+	struct fb_info *info = def_par->info;
+#else
 static void vmw_deferred_io(struct fb_info *info,
 			    struct list_head *pagelist)
 {
 	struct vmw_fb_par *par = info->par;
+#endif
 	unsigned long start, end, min, max;
 	unsigned long flags;
 	struct page *page;
@@ -306,10 +329,17 @@ static void vmw_deferred_io(struct fb_info *info,
 	vmw_fb_dirty_flush(par);
 };
 
+#if (defined(VMWGFX_STANDALONE) && defined(VMWGFX_FB_DEFERRED))
+static struct vmw_fb_deferred_io vmw_defio = {
+	.delay		= VMW_DIRTY_DELAY,
+	.deferred_io	= vmw_deferred_io,
+};
+#else
 struct fb_deferred_io vmw_defio = {
 	.delay		= VMW_DIRTY_DELAY,
 	.deferred_io	= vmw_deferred_io,
 };
+#endif
 
 /*
  * Draw code
@@ -516,6 +546,8 @@ int vmw_fb_init(struct vmw_private *vmw_priv)
 	info->pixmap.scan_align = 1;
 #endif
 
+#if (!defined(VMWGFX_STANDALONE) || defined(VMWGFX_HANDOVER))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 35))
 	info->apertures = alloc_apertures(1);
 	if (!info->apertures) {
 		ret = -ENOMEM;
@@ -523,6 +555,11 @@ int vmw_fb_init(struct vmw_private *vmw_priv)
 	}
 	info->apertures->ranges[0].base = vmw_priv->vram_start;
 	info->apertures->ranges[0].size = vmw_priv->vram_size;
+#else
+	info->aperture_base = vmw_priv->vram_start;
+	info->aperture_size = vmw_priv->vram_size;
+#endif
+#endif
 
 	/*
 	 * Dirty & Deferred IO
@@ -531,7 +568,11 @@ int vmw_fb_init(struct vmw_private *vmw_priv)
 	par->dirty.y1 = par->dirty.y2 = 0;
 	par->dirty.active = true;
 	spin_lock_init(&par->dirty.lock);
+#if (defined(VMWGFX_STANDALONE) && defined(VMWGFX_FB_DEFERRED))
+	par->def_par.fbdefio = &vmw_defio;
+#else
 	info->fbdefio = &vmw_defio;
+#endif
 	fb_deferred_io_init(info);
 
 	ret = register_framebuffer(info);
@@ -542,7 +583,11 @@ int vmw_fb_init(struct vmw_private *vmw_priv)
 
 err_defio:
 	fb_deferred_io_cleanup(info);
+#if !defined(VMWGFX_STANDALONE) || defined(VMWGFX_HANDOVER)
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 35))
 err_aper:
+#endif
+#endif
 	ttm_bo_kunmap(&par->map);
 err_unref:
 	ttm_bo_unref((struct ttm_buffer_object **)&par->vmw_bo);
@@ -698,7 +743,12 @@ err_no_buffer:
 
 	/* If there already was stuff dirty we wont
 	 * schedule a new work, so lets do it now */
+
+#if (defined(VMWGFX_STANDALONE) && defined(VMWGFX_FB_DEFERRED))
+	schedule_delayed_work(&par->def_par.deferred_work, 0);
+#else
 	schedule_delayed_work(&info->deferred_work, 0);
+#endif
 
 	return 0;
 }
