@@ -268,4 +268,14 @@ extern void vmw_fb_deferred_io_cleanup(struct fb_info *info);
 #define VMWGFX_FB_DEFERRED
 #endif
 
+/**
+ * Power management
+ */
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 29))
+#define VMW_HAS_DEV_PM_OPS
+#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27))
+#define VMW_HAS_PM_OPS
+#endif
+
 #endif
