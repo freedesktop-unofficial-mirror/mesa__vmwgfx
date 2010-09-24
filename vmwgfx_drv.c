@@ -151,6 +151,9 @@ static struct pci_device_id vmw_pci_id_list[] = {
 
 static char *vmw_devname = "vmwgfx";
 static int enable_fbdev;
+#ifdef VMWGFX_STANDALONE
+static int force_stealth;
+#endif
 
 static int vmw_probe(struct pci_dev *, const struct pci_device_id *);
 static void vmw_master_init(struct vmw_master *);
@@ -159,6 +162,11 @@ static int vmwgfx_pm_notifier(struct notifier_block *nb, unsigned long val,
 
 MODULE_PARM_DESC(enable_fbdev, "Enable vmwgfx fbdev");
 module_param_named(enable_fbdev, enable_fbdev, int, 0600);
+
+#ifdef VMWGFX_STANDALONE
+MODULE_PARM_DESC(force_stealth, "Force stealth mode");
+module_param_named(force_stealth, force_stealth, int, 0600);
+#endif
 
 static void vmw_print_capabilities(uint32_t capabilities)
 {
@@ -274,7 +282,11 @@ static int vmw_driver_load(struct drm_device *dev, unsigned long chipset)
 	dev_priv->vram_start = pci_resource_start(dev->pdev, 1);
 	dev_priv->mmio_start = pci_resource_start(dev->pdev, 2);
 
-	dev_priv->enable_fb = enable_fbdev;
+#ifdef VMWGFX_STANDALONE
+	dev_priv->enable_fb = enable_fbdev && !force_stealth;
+#else
+	dev_priv->enable_fb = enable_fbdev && !force_stealth;
+#endif
 
 	mutex_lock(&dev_priv->hw_mutex);
 
