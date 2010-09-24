@@ -356,7 +356,10 @@ void vmw_kms_idle_workqueues(struct vmw_master *vmaster)
 
 	mutex_lock(&vmaster->fb_surf_mutex);
 	list_for_each_entry(entry, &vmaster->fb_surf, head) {
-		flush_work(&entry->d_work.work);
+		if (cancel_delayed_work_sync(&entry->d_work)) {
+			(void) entry->d_work.work.func(&entry->d_work.work);
+		}
+		(void) cancel_delayed_work_sync(&entry->d_work);
 	}
 	mutex_unlock(&vmaster->fb_surf_mutex);
 }
