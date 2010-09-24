@@ -774,8 +774,7 @@ static int vmwgfx_pm_notifier(struct notifier_block *nb, unsigned long val,
 		 */
 		ttm_bo_swapout_all(&dev_priv->bdev);
 
-#if (defined(VMWGFX_STANDALONE) &&\
-     !(defined(VMW_HAS_DEV_PM_OPS) || defined(VMW_HAS_PM_OPS)))
+#if (defined(VMWGFX_STANDALONE) && !defined(VMW_HAS_PM_OPS))
 
 		/**
 		 * Release 3d reference held by fbdev and potentially
@@ -790,8 +789,7 @@ static int vmwgfx_pm_notifier(struct notifier_block *nb, unsigned long val,
 	case PM_POST_HIBERNATION:
 	case PM_POST_SUSPEND:
 	case PM_POST_RESTORE:
-#if (defined(VMWGFX_STANDALONE) &&\
-     !(defined(VMW_HAS_DEV_PM_OPS) || defined(VMW_HAS_PM_OPS)))
+#if (defined(VMWGFX_STANDALONE) && !defined(VMW_HAS_PM_OPS))
 
 		/**
 		 * Reclaim 3d reference held by fbdev and potentially
@@ -841,8 +839,7 @@ static int vmw_pci_resume(struct pci_dev *pdev)
 	return pci_enable_device(pdev);
 }
 
-#if !defined(VMWGFX_STANDALONE) || defined(VMW_HAS_PM_OPS)\
-  || defined(VMW_HAS_DEV_PM_OPS)
+#if !defined(VMWGFX_STANDALONE) || defined(VMW_HAS_PM_OPS)
 
 static int vmw_pm_suspend(struct device *kdev)
 {
@@ -905,22 +902,16 @@ static void vmw_pm_complete(struct device *kdev)
 	dev_priv->suspended = false;
 }
 
-
-#if !defined(VMWGFX_STANDALONE) || defined(VMW_HAS_DEV_PM_OPS)
-static const struct dev_pm_ops vmw_pm_ops = {
-	.prepare = vmw_pm_prepare,
-	.complete = vmw_pm_complete,
-	.suspend = vmw_pm_suspend,
-	.resume = vmw_pm_resume,
-};
+#ifdef VMWGFX_STANDALONE
+static struct dev_pm_ops vmw_pm_ops = {
 #else
-static const struct pm_ops vmw_pm_ops = {
+static const struct dev_pm_ops vmw_pm_ops = {
+#endif
 	.prepare = vmw_pm_prepare,
 	.complete = vmw_pm_complete,
 	.suspend = vmw_pm_suspend,
 	.resume = vmw_pm_resume,
 };
-#endif
 #endif
 
 static struct drm_driver driver = {
@@ -963,7 +954,7 @@ static struct drm_driver driver = {
 		 .id_table = vmw_pci_id_list,
 		 .probe = vmw_probe,
 		 .remove = vmw_remove,
-#if (!defined(VMWGFX_STANDALONE) || defined(VMW_HAS_DEV_PM_OPS) || defined(VMW_HAS_PM_OPS))
+#if (!defined(VMWGFX_STANDALONE) || defined(VMW_HAS_PM_OPS))
 		 .driver = {
 			 .pm = &vmw_pm_ops
 		 }

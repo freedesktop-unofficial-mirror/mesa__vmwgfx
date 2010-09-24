@@ -272,10 +272,11 @@ extern void vmw_fb_deferred_io_cleanup(struct fb_info *info);
  * Power management
  */
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 29))
-#define VMW_HAS_DEV_PM_OPS
-#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27))
 #define VMW_HAS_PM_OPS
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 29))
+#define dev_pm_ops pm_ops
+#endif
 #endif
 
 #endif
