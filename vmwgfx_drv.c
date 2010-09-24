@@ -153,6 +153,7 @@ static char *vmw_devname = "vmwgfx";
 static int enable_fbdev;
 #ifdef VMWGFX_STANDALONE
 static int force_stealth;
+int force_no_3d;
 #endif
 
 static int vmw_probe(struct pci_dev *, const struct pci_device_id *);
@@ -166,6 +167,8 @@ module_param_named(enable_fbdev, enable_fbdev, int, 0600);
 #ifdef VMWGFX_STANDALONE
 MODULE_PARM_DESC(force_stealth, "Force stealth mode");
 module_param_named(force_stealth, force_stealth, int, 0600);
+MODULE_PARM_DESC(force_no_3d, "Force no 3D");
+module_param_named(force_no_3d, force_no_3d, int, 0600);
 #endif
 
 static void vmw_print_capabilities(uint32_t capabilities)

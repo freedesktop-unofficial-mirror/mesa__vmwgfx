@@ -34,6 +34,13 @@ bool vmw_fifo_have_3d(struct vmw_private *dev_priv)
 	__le32 __iomem *fifo_mem = dev_priv->mmio_virt;
 	uint32_t fifo_min, hwversion;
 
+#ifdef VMWGFX_STANDALONE
+	extern int force_no_3d;
+
+	if (force_no_3d)
+		return false;
+#endif
+
 	if (!(dev_priv->capabilities & SVGA_CAP_EXTENDED_FIFO))
 		return false;
 
