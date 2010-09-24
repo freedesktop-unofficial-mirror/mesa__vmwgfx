@@ -1025,7 +1025,6 @@ static void __exit vmwgfx_exit(void)
 {
 	drm_exit(&driver);
 #ifdef VMWGFX_STANDALONE
-	drm_exit(&driver);
 	DRM_INFO("TTM exit\n");
 	ttm_exit();
 	DRM_INFO("DRM core exit\n");
