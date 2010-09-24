@@ -404,6 +404,15 @@ static int vmw_driver_load(struct drm_device *dev, unsigned long chipset)
 			DRM_ERROR("Failed reserving the SVGA MMIO resource.\n");
 			goto out_no_device;
 		}
+#if defined(VMWGFX_STANDALONE) && !defined(VMWGFX_HANDOVER)
+		/**
+		 *We can't remove the other fbdev driver. Disable fbdev.
+		 */
+
+		DRM_INFO("We can't kick out the current fbdev driver. "
+			 "Disabling vmwgfx fbdev.\n");
+		dev_priv->enable_fb = false;
+#endif
 	}
 	ret = vmw_kms_init(dev_priv);
 	if (unlikely(ret != 0))
