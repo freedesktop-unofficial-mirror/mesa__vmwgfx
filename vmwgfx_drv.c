@@ -949,6 +949,7 @@ static struct drm_driver driver = {
 	.irq_postinstall = vmw_irq_postinstall,
 	.irq_uninstall = vmw_irq_uninstall,
 	.irq_handler = vmw_irq_handler,
+	.get_vblank_counter = vmw_get_vblank_counter,
 	.reclaim_buffers_locked = NULL,
 	.get_map_ofs = drm_core_get_map_ofs,
 	.get_reg_ofs = drm_core_get_reg_ofs,

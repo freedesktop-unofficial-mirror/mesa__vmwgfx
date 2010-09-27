@@ -1139,3 +1139,8 @@ bool vmw_kms_validate_mode_vram(struct vmw_private *dev_priv,
 {
 	return ((u64) pitch * (u64) height) < (u64) dev_priv->vram_size;
 }
+
+u32 vmw_get_vblank_counter(struct drm_device *dev, int crtc)
+{
+	return 0;
+}

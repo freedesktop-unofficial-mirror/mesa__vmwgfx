@@ -525,6 +525,8 @@ void vmw_kms_idle_workqueues(struct vmw_master *vmaster);
 bool vmw_kms_validate_mode_vram(struct vmw_private *dev_priv,
 				uint32_t pitch,
 				uint32_t height);
+u32 vmw_get_vblank_counter(struct drm_device *dev, int crtc);
+
 
 /**
  * Overlay control - vmwgfx_overlay.c
