@@ -577,11 +577,19 @@ static long vmw_unlocked_ioctl(struct file *filp, unsigned int cmd,
 		struct drm_ioctl_desc *ioctl =
 		    &vmw_ioctls[nr - DRM_COMMAND_BASE];
 
+#ifndef VMWGFX_STANDALONE
+		if (unlikely(ioctl->cmd_drv != cmd)) {
+			DRM_ERROR("Invalid command format, ioctl %d\n",
+				  nr - DRM_COMMAND_BASE);
+			return -EINVAL;
+		}
+#else
 		if (unlikely(ioctl->cmd != cmd)) {
 			DRM_ERROR("Invalid command format, ioctl %d\n",
 				  nr - DRM_COMMAND_BASE);
 			return -EINVAL;
 		}
+#endif
 	}
 
 #ifndef VMWGFX_STANDALONE
