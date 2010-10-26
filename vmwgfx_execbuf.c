@@ -582,7 +582,6 @@ static int vmw_validate_single_buffer(struct vmw_private *dev_priv,
 	 * previous contents.
 	 */
 
-	DRM_INFO("Falling through to VRAM.\n");
 	ret = ttm_bo_validate(bo, &vmw_vram_placement, true, false, false);
 	return ret;
 }
