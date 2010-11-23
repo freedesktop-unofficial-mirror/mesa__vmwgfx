@@ -173,7 +173,7 @@ int ttm_bo_wait_unreserved(struct ttm_buffer_object *bo, bool interruptible)
 }
 EXPORT_SYMBOL(ttm_bo_wait_unreserved);
 
-static void ttm_bo_add_to_lru(struct ttm_buffer_object *bo)
+void ttm_bo_add_to_lru(struct ttm_buffer_object *bo)
 {
 	struct ttm_bo_device *bdev = bo->bdev;
 	struct ttm_mem_type_manager *man;
@@ -195,11 +195,7 @@ static void ttm_bo_add_to_lru(struct ttm_buffer_object *bo)
 	}
 }
 
-/**
- * Call with the lru_lock held.
- */
-
-static int ttm_bo_del_from_lru(struct ttm_buffer_object *bo)
+int ttm_bo_del_from_lru(struct ttm_buffer_object *bo)
 {
 	int put_count = 0;
 
@@ -271,6 +267,15 @@ static void ttm_bo_ref_bug(struct kref *list_kref)
 	BUG();
 }
 
+void ttm_bo_list_ref_sub(struct ttm_buffer_object *bo, int count,
+			 bool never_free)
+{
+	while (count--)
+		kref_put(&bo->list_kref,
+			 (never_free || (count >= 0)) ? ttm_bo_ref_bug :
+			 ttm_bo_release_list);
+}
+
 int ttm_bo_reserve(struct ttm_buffer_object *bo,
 		   bool interruptible,
 		   bool no_wait, bool use_sequence, uint32_t sequence)
@@ -286,8 +291,7 @@ int ttm_bo_reserve(struct ttm_buffer_object *bo,
 		put_count = ttm_bo_del_from_lru(bo);
 	spin_unlock(&glob->lru_lock);
 
-	while (put_count--)
-		kref_put(&bo->list_kref, ttm_bo_ref_bug);
+	ttm_bo_list_ref_sub(bo, put_count, true);
 
 	return ret;
 }
@@ -500,8 +504,7 @@ static void ttm_bo_cleanup_refs_or_queue(struct ttm_buffer_object *bo)
 		spin_unlock(&glob->lru_lock);
 		ttm_bo_cleanup_memtype_use(bo);
 
-		while (put_count--)
-			kref_put(&bo->list_kref, ttm_bo_ref_bug);
+		ttm_bo_list_ref_sub(bo, put_count, true);
 
 		return;
 	} else {
@@ -584,8 +587,7 @@ retry:
 	spin_unlock(&glob->lru_lock);
 	ttm_bo_cleanup_memtype_use(bo);
 
-	while (put_count--)
-		kref_put(&bo->list_kref, ttm_bo_ref_bug);
+	ttm_bo_list_ref_sub(bo, put_count, true);
 
 	return 0;
 }
@@ -806,8 +808,7 @@ retry:
 
 	BUG_ON(ret != 0);
 
-	while (put_count--)
-		kref_put(&bo->list_kref, ttm_bo_ref_bug);
+	ttm_bo_list_ref_sub(bo, put_count, true);
 
 	ret = ttm_bo_evict(bo, interruptible, no_wait_reserve, no_wait_gpu);
 	ttm_bo_unreserve(bo);
@@ -1787,8 +1788,7 @@ static int ttm_bo_swapout(struct ttm_mem_shrink *shrink)
 	put_count = ttm_bo_del_from_lru(bo);
 	spin_unlock(&glob->lru_lock);
 
-	while (put_count--)
-		kref_put(&bo->list_kref, ttm_bo_ref_bug);
+	ttm_bo_list_ref_sub(bo, put_count, true);
 
 	/**
 	 * Wait for GPU, then move to system cached.
