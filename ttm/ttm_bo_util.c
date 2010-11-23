@@ -253,7 +253,11 @@ static int ttm_copy_io_ttm_page(struct ttm_tt *ttm, void *src,
 	src = (void *)((unsigned long)src + (page << PAGE_SHIFT));
 
 #ifdef CONFIG_X86
+#ifdef VMW_HAS_STACK_KMAP_ATOMIC
+	dst = kmap_atomic_prot(d, prot);
+#else
 	dst = kmap_atomic_prot(d, KM_USER0, prot);
+#endif /* VMW_HAS_STACK_KMAP_ATOMIC */
 #else
 	if (pgprot_val(prot) != pgprot_val(PAGE_KERNEL))
 		dst = vmap(&d, 1, 0, prot);
@@ -289,7 +293,11 @@ static int ttm_copy_ttm_io_page(struct ttm_tt *ttm, void *dst,
 
 	dst = (void *)((unsigned long)dst + (page << PAGE_SHIFT));
 #ifdef CONFIG_X86
+#ifdef VMW_HAS_STACK_KMAP_ATOMIC
+	src = kmap_atomic_prot(s, prot);
+#else
 	src = kmap_atomic_prot(s, KM_USER0, prot);
+#endif /*VMW_HAS_STACK_KMAP_ATOMIC*/
 #else
 	if (pgprot_val(prot) != pgprot_val(PAGE_KERNEL))
 		src = vmap(&s, 1, 0, prot);
