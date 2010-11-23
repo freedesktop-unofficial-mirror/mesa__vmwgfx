@@ -23,6 +23,7 @@
 #include <linux/highmem.h>
 #include <linux/mm.h>
 #include <linux/list.h>
+#include <linux/kref.h>
 #ifndef CONFIG_FB_DEFERRED_IO
 #include <linux/fb.h>
 #endif
@@ -277,6 +278,23 @@ extern void vmw_fb_deferred_io_cleanup(struct fb_info *info);
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 29))
 #define dev_pm_ops pm_ops
 #endif
+#endif
+
+/**
+ * kref_sub
+ */
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,38))
+static inline int vmwgfx_kref_sub(struct kref *kref, unsigned int count,
+				  void (*release)(struct kref *kref))
+{
+	if (atomic_sub_and_test((int) count, &kref->refcount)) {
+		release(kref);
+		return 1;
+	}
+	return 0;
+}
+#define kref_sub(_a, _b, _c) vmwgfx_kref_sub(_a, _b, _c)
 #endif
 
 #endif
