@@ -301,7 +301,7 @@ static inline int vmwgfx_kref_sub(struct kref *kref, unsigned int count,
  * kmap_atomic
  */
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,38))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,37))
 #define VMW_HAS_STACK_KMAP_ATOMIC
 #endif
 
