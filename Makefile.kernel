@@ -18,7 +18,7 @@ vmwgfx-objs    := drm_auth.o drm_bufs.o drm_context.o drm_crtc.o \
 		vmwgfx_drv.o vmwgfx_gmr.o vmwgfx_buffer.o vmwgfx_ttm_glue.o \
 		vmwgfx_fifo.o vmwgfx_resource.o vmwgfx_ioctl.o vmwgfx_execbuf.o\
 		vmwgfx_irq.o vmwgfx_kms.o vmwgfx_ldu.o vmwgfx_fb.o \
-		vmwgfx_overlay.o vmwgfx_fence.o vmwgfx_defio.o \
+		vmwgfx_overlay.o vmwgfx_marker.o vmwgfx_defio.o \
 		vmwgfx_gmrid_manager.o
 
 ifeq ($(CONFIG_COMPAT),y)
