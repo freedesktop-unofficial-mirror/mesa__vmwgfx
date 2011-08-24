@@ -402,6 +402,7 @@ int drm_get_dev(struct pci_dev *pdev, const struct pci_device_id *ent,
 		goto err_g1;
 
 	pci_set_master(pdev);
+	mutex_lock(&drm_global_mutex);
 	if ((ret = drm_fill_in_dev(dev, pdev, ent, driver))) {
 		printk(KERN_ERR "DRM: Fill_in_dev failed.\n");
 		goto err_g2;
@@ -436,6 +437,7 @@ int drm_get_dev(struct pci_dev *pdev, const struct pci_device_id *ent,
 		 driver->name, driver->major, driver->minor, driver->patchlevel,
 		 driver->date, pci_name(pdev), dev->primary->index);
 
+	mutex_unlock(&drm_global_mutex);
 	return 0;
 
 err_g4:
@@ -447,6 +449,7 @@ err_g2:
 	pci_disable_device(pdev);
 err_g1:
 	kfree(dev);
+	mutex_unlock(&drm_global_mutex);
 	return ret;
 }
 EXPORT_SYMBOL(drm_get_dev);

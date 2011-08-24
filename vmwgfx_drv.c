@@ -600,19 +600,7 @@ static long vmw_unlocked_ioctl(struct file *filp, unsigned int cmd,
 #endif
 	}
 
-#ifndef VMWGFX_STANDALONE
 	return drm_ioctl(filp, cmd, arg);
-#else
-	{
-		int ret;
-
-		lock_kernel();
-		ret = drm_ioctl(filp->f_path.dentry->d_inode, filp, cmd, arg);
-		unlock_kernel();
-
-		return ret;
-	}
-#endif
 }
 
 static int vmw_firstopen(struct drm_device *dev)

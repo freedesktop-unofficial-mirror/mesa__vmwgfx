@@ -433,11 +433,11 @@ static int drm_version(struct drm_device *dev, void *data,
  * Looks up the ioctl function in the ::ioctls table, checking for root
  * previleges if so required, and dispatches to the respective function.
  */
-int drm_ioctl(struct inode *inode, struct file *filp,
+long drm_ioctl(struct file *filp,
 	      unsigned int cmd, unsigned long arg)
 {
 	struct drm_file *file_priv = filp->private_data;
-	struct drm_device *dev = file_priv->minor->dev;
+	struct drm_device *dev;
 	struct drm_ioctl_desc *ioctl;
 	drm_ioctl_t *func;
 	unsigned int nr = DRM_IOCTL_NR(cmd);
@@ -445,6 +445,7 @@ int drm_ioctl(struct inode *inode, struct file *filp,
 	char stack_kdata[128];
 	char *kdata = NULL;
 
+	dev = file_priv->minor->dev;
 	atomic_inc(&dev->ioctl_count);
 	atomic_inc(&dev->counts[_DRM_STAT_IOCTLS]);
 	++file_priv->ioctl_count;
@@ -500,7 +501,13 @@ int drm_ioctl(struct inode *inode, struct file *filp,
 				goto err_i1;
 			}
 		}
-		retcode = func(dev, kdata, file_priv);
+		if (ioctl->flags & DRM_UNLOCKED)
+			retcode = func(dev, kdata, file_priv);
+		else {
+			mutex_lock(&drm_global_mutex);
+			retcode = func(dev, kdata, file_priv);
+			mutex_unlock(&drm_global_mutex);
+		}
 
 		if (cmd & IOC_OUT) {
 			if (copy_to_user((void __user *)arg, kdata,
