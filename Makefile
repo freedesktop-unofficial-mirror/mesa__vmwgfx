@@ -188,7 +188,7 @@ else
 
 # Check for kernel versions that we don't support.
 
-BELOW26 := $(shell if [ $(VERSION) -lt 2 -o $(PATCHLEVEL) -lt 6 ]; then \
+BELOW26 := $(shell if [ $(VERSION) -lt 2 -o $(VERSION) -eq 2 -a $(PATCHLEVEL) -lt 6 ]; then \
 		echo y; fi)
 
 ifeq ($(BELOW26),y)
