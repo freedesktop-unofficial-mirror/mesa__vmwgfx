@@ -523,7 +523,15 @@ int vmw_fence_obj_wait_ioctl(struct drm_device *dev, void *data,
 	struct vmw_fence_obj *fence;
 	struct ttm_object_file *tfile = vmw_fpriv(file_priv)->tfile;
 	int ret;
-	uint64_t wait_timeout = ((uint64_t)arg->timeout_us * HZ) / 1000000;
+	uint64_t wait_timeout = ((uint64_t)arg->timeout_us * HZ);
+
+	/*
+	 * 64-bit division not present on 32-bit systems, so do an
+	 * approximation. (Divide by 1000000).
+	 */
+
+	wait_timeout = (wait_timeout >> 20) + (wait_timeout >> 24) -
+	  (wait_timeout >> 26);
 
 	if (!arg->cookie_valid) {
 		arg->cookie_valid = 1;
