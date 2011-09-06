@@ -944,7 +944,7 @@ typedef enum {
  */
 
 typedef
-struct {
+struct SVGAFifoCmdUpdate {
    uint32 x;
    uint32 y;
    uint32 width;
@@ -963,7 +963,7 @@ struct {
  */
 
 typedef
-struct {
+struct SVGAFifoCmdRectCopy {
    uint32 srcX;
    uint32 srcY;
    uint32 destX;
@@ -987,7 +987,7 @@ struct {
  */
 
 typedef
-struct {
+struct SVGAFifoCmdDefineCursor {
    uint32 id;             // Reserved, must be zero.
    uint32 hotspotX;
    uint32 hotspotY;
@@ -1016,7 +1016,7 @@ struct {
  */
 
 typedef
-struct {
+struct SVGAFifoCmdDefineAlphaCursor {
    uint32 id;             // Reserved, must be zero.
    uint32 hotspotX;
    uint32 hotspotY;
@@ -1039,7 +1039,7 @@ struct {
  */
 
 typedef
-struct {
+struct SVGAFifoCmdUpdateVerbose {
    uint32 x;
    uint32 y;
    uint32 width;
@@ -1064,7 +1064,7 @@ struct {
 #define  SVGA_ROP_COPY                    0x03
 
 typedef
-struct {
+struct SVGAFifoCmdFrontRopFill {
    uint32 color;     // In the same format as the GFB
    uint32 x;
    uint32 y;
@@ -1107,7 +1107,7 @@ struct {
  */
 
 typedef
-struct {
+struct SVGAFifoCmdEscape {
    uint32 nsid;
    uint32 size;
    /* followed by 'size' bytes of data */
@@ -1381,8 +1381,7 @@ typedef
 struct {
    uint32 gmrId;
    uint32 numPages;
-}
-SVGAFifoCmdDefineGMR2;
+} SVGAFifoCmdDefineGMR2;
 
 
 /*
@@ -1424,8 +1423,8 @@ typedef
 struct {
    uint32 gmrId;
    SVGARemapGMR2Flags flags;
-	uint32 offsetPages; /* offset in pages to begin remap */
-	uint32 numPages; /* number of pages to remap */
+   uint32 offsetPages; /* offset in pages to begin remap */
+   uint32 numPages; /* number of pages to remap */
    /*
     * Followed by additional data depending on SVGARemapGMR2Flags.
     *
@@ -1434,7 +1433,6 @@ struct {
     * (according to flag SVGA_REMAP_GMR2_PPN64) follows.  If flag
     * SVGA_REMAP_GMR2_SINGLE_PPN is set, array contains a single entry.
     */
-}
-SVGAFifoCmdRemapGMR2;
+} SVGAFifoCmdRemapGMR2;
 
 #endif
