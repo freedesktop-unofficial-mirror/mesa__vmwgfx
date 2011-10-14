@@ -40,6 +40,9 @@ irqreturn_t vmw_irq_handler(DRM_IRQ_ARGS)
 	status = inl(dev_priv->io_start + VMWGFX_IRQSTATUS_PORT);
 	spin_unlock(&dev_priv->irq_lock);
 
+	if (likely(status))
+		outl(status, dev_priv->io_start + VMWGFX_IRQSTATUS_PORT);
+
 	if (status & SVGA_IRQFLAG_ANY_FENCE) {
 		__le32 __iomem *fifo_mem = dev_priv->mmio_virt;
 		uint32_t seqno = ioread32(fifo_mem + SVGA_FIFO_FENCE);
@@ -50,10 +53,8 @@ irqreturn_t vmw_irq_handler(DRM_IRQ_ARGS)
 	if (status & SVGA_IRQFLAG_FIFO_PROGRESS)
 		wake_up_all(&dev_priv->fifo_queue);
 
-	if (likely(status)) {
-		outl(status, dev_priv->io_start + VMWGFX_IRQSTATUS_PORT);
+	if (likely(status))
 		return IRQ_HANDLED;
-	}
 
 	return IRQ_NONE;
 }
