@@ -1518,7 +1518,7 @@ int vmw_du_update_layout(struct vmw_private *dev_priv, unsigned num,
 			du->pref_height = 600;
 			du->pref_active = false;
 		}
-		con->status = vmw_du_connector_detect(con);
+		con->status = vmw_du_connector_detect(con, false);
 	}
 
 	mutex_unlock(&dev->mode_config.mutex);
@@ -1536,14 +1536,13 @@ void vmw_du_crtc_restore(struct drm_crtc *crtc)
 
 void vmw_du_crtc_gamma_set(struct drm_crtc *crtc,
 			   u16 *r, u16 *g, u16 *b,
-			   uint32_t size)
+			   uint32_t start, uint32_t size)
 {
 	struct vmw_private *dev_priv = vmw_priv(crtc->dev);
 	int i;
 
-	for (i = 0; i < size; i++) {
-		DRM_DEBUG("%d r/g/b = 0x%04x / 0x%04x / 0x%04x\n", i,
-			  r[i], g[i], b[i]);
+	for (i = start; i < size; i++) {
+		DRM_DEBUG("%d r/g/b = 0x%04x / 0x%04x / 0x%04x\n", i, r[i], g[i], b[i]);
 		vmw_write(dev_priv, SVGA_PALETTE_BASE + i * 3 + 0, r[i] >> 8);
 		vmw_write(dev_priv, SVGA_PALETTE_BASE + i * 3 + 1, g[i] >> 8);
 		vmw_write(dev_priv, SVGA_PALETTE_BASE + i * 3 + 2, b[i] >> 8);
@@ -1563,7 +1562,7 @@ void vmw_du_connector_restore(struct drm_connector *connector)
 }
 
 enum drm_connector_status
-	vmw_du_connector_detect(struct drm_connector *connector)
+	vmw_du_connector_detect(struct drm_connector *connector, bool force)
 {
 	uint32_t num_displays;
 	struct drm_device *dev = connector->dev;
