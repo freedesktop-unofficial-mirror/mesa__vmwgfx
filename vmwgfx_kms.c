@@ -453,7 +453,7 @@ static int do_surface_dirty_sou(struct vmw_private *dev_priv,
 
 
 		ret = vmw_execbuf_process(file_priv, dev_priv, NULL, cmd,
-					  fifo_size, 0, NULL);
+					  fifo_size, 0, NULL, NULL);
 
 		if (unlikely(ret != 0))
 			break;
@@ -707,7 +707,7 @@ static int do_dmabuf_define_gmrfb(struct drm_file *file_priv,
 	cmd->body.ptr.offset = 0;
 
 	ret = vmw_execbuf_process(file_priv, dev_priv, NULL, cmd,
-				  fifo_size, 0, NULL);
+				  fifo_size, 0, NULL, NULL);
 
 	kfree(cmd);
 
@@ -784,7 +784,7 @@ static int do_dmabuf_dirty_sou(struct drm_file *file_priv,
 
 		fifo_size = sizeof(*blits) * hit_num;
 		ret = vmw_execbuf_process(file_priv, dev_priv, NULL, blits,
-					  fifo_size, 0, NULL);
+					  fifo_size, 0, NULL, NULL);
 
 		if (unlikely(ret != 0))
 			break;
@@ -1160,7 +1160,7 @@ int vmw_kms_present(struct vmw_private *dev_priv,
 		cmd->body.destRect.bottom = clip_y2;
 
 		ret = vmw_execbuf_process(file_priv, dev_priv, NULL, cmd,
-					  fifo_size, 0, NULL);
+					  fifo_size, 0, NULL, NULL);
 
 		if (unlikely(ret != 0))
 			break;
@@ -1271,7 +1271,7 @@ int vmw_kms_readback(struct vmw_private *dev_priv,
 	fifo_size = sizeof(*cmd) + sizeof(*blits) * blits_pos;
 
 	ret = vmw_execbuf_process(file_priv, dev_priv, NULL, cmd, fifo_size,
-				  0, user_fence_rep);
+				  0, user_fence_rep, NULL);
 
 	kfree(cmd);
 
