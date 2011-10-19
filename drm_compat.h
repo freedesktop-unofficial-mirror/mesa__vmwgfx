@@ -388,4 +388,10 @@ static inline void set_page_locked(struct page *page)
 #define current_euid() current->euid;
 #endif
 
+#ifndef abs64
+#define abs64(x) ({				\
+		s64 __x = (x);			\
+		(__x < 0) ? -__x : __x;		\
+	})
+#endif
 #endif
