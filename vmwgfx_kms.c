@@ -1005,7 +1005,7 @@ static struct drm_framebuffer *vmw_kms_fb_create(struct drm_device *dev,
 	required_size = mode_cmd->pitch * mode_cmd->height;
 	if (unlikely(required_size > (u64) dev_priv->vram_size)) {
 		DRM_ERROR("VRAM size is too small for requested mode.\n");
-		return NULL;
+		return ERR_PTR(-ENOMEM);
 	}
 
 	/*
@@ -1020,7 +1020,7 @@ static struct drm_framebuffer *vmw_kms_fb_create(struct drm_device *dev,
 	user_obj = ttm_base_object_lookup(tfile, mode_cmd->handle);
 	if (unlikely(user_obj == NULL)) {
 		DRM_ERROR("Could not locate requested kms frame buffer.\n");
-		return NULL;
+		return ERR_PTR(-EINVAL);
 	}
 
 	/**
@@ -1044,7 +1044,7 @@ static struct drm_framebuffer *vmw_kms_fb_create(struct drm_device *dev,
 	if (ret) {
 		DRM_ERROR("failed to create vmw_framebuffer: %i\n", ret);
 		ttm_base_object_unref(&user_obj);
-		return NULL;
+		return ERR_PTR(ret);
 	} else
 		vfb->user_obj = user_obj;
 	return &vfb->base;
@@ -1055,7 +1055,7 @@ try_dmabuf:
 	ret = vmw_user_dmabuf_lookup(tfile, mode_cmd->handle, &bo);
 	if (ret) {
 		DRM_ERROR("failed to find buffer: %i\n", ret);
-		return NULL;
+		return ERR_PTR(ret);
 	}
 
 	ret = vmw_kms_new_framebuffer_dmabuf(dev_priv, bo, &vfb,
@@ -1067,7 +1067,7 @@ try_dmabuf:
 	if (ret) {
 		DRM_ERROR("failed to create vmw_framebuffer: %i\n", ret);
 		ttm_base_object_unref(&user_obj);
-		return NULL;
+		return ERR_PTR(ret);
 	} else
 		vfb->user_obj = user_obj;
 
@@ -1079,7 +1079,7 @@ err_not_scanout:
 	vmw_surface_unreference(&surface);
 	ttm_base_object_unref(&user_obj);
 
-	return NULL;
+	return ERR_PTR(-EINVAL);
 }
 
 static struct drm_mode_config_funcs vmw_kms_funcs = {
