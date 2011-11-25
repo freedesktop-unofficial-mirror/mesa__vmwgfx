@@ -1934,7 +1934,7 @@ int vmw_kms_update_layout_ioctl(struct drm_device *dev, void *data,
 	}
 
 	rects_size = arg->num_outputs * sizeof(struct drm_vmw_rect);
-	rects = kzalloc(rects_size, GFP_KERNEL);
+	rects = kcalloc(arg->num_outputs, sizeof(struct drm_vmw_rect), GFP_KERNEL);
 	if (unlikely(!rects)) {
 		ret = -ENOMEM;
 		goto out_unlock;
@@ -1949,10 +1949,10 @@ int vmw_kms_update_layout_ioctl(struct drm_device *dev, void *data,
 	}
 
 	for (i = 0; i < arg->num_outputs; ++i) {
-		if (rects->x < 0 ||
-		    rects->y < 0 ||
-		    rects->x + rects->w > mode_config->max_width ||
-		    rects->y + rects->h > mode_config->max_height) {
+		if (rects[i].x < 0 ||
+		    rects[i].y < 0 ||
+		    rects[i].x + rects[i].w > mode_config->max_width ||
+		    rects[i].y + rects[i].h > mode_config->max_height) {
 			DRM_ERROR("Invalid GUI layout.\n");
 			ret = -EINVAL;
 			goto out_free;
