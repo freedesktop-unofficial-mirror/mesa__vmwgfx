@@ -305,4 +305,11 @@ static inline int vmwgfx_kref_sub(struct kref *kref, unsigned int count,
 #define VMW_HAS_STACK_KMAP_ATOMIC
 #endif
 
+/**
+ * shmem_read_mapping_page appeared in 3.0-rc5
+ */
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 0, 0))
+#define shmem_read_mapping_page(_a, _b) read_mapping_page(_a, _b, NULL)
+#endif
+
 #endif
