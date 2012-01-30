@@ -144,9 +144,9 @@ static int fb_deferred_io_mkwrite(struct vm_area_struct *vma,
 	}
 
 	list_add_tail(&page->lru, &cur->lru);
+
 page_already_added:
 	mutex_unlock(&fbdefio->lock);
-	printk(KERN_INFO "Makewrite\n");
 	/* come back after delay to process the deferred IO */
 	schedule_delayed_work(&par->deferred_work, fbdefio->delay);
 	return 0;
@@ -190,11 +190,34 @@ static int vmw_fb_deferred_io_fsync(struct file *file, int datasync)
 		return 0;
 
 	/* Kill off the delayed work */
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 37))
+	cancel_delayed_work_sync(&par->deferred_work);
+#else
 	cancel_rearming_delayed_work(&par->deferred_work);
+#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 37)) */
 
 	/* Run it immediately */
 	return schedule_delayed_work(&par->deferred_work, 0);
 }
+
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 1, 0))
+static int vmw_fb_deferred_io_fsync_31(struct file *file, loff_t start,
+				       loff_t end, int datasync)
+{
+	struct inode *inode = file->f_path.dentry->d_inode;
+	int err = filemap_write_and_wait_range(inode->i_mapping, start, end);
+
+	if (unlikely(err != 0))
+		return err;
+
+	mutex_lock(&inode->i_mutex);
+	err = vmw_fb_deferred_io_fsync(file, datasync);
+	mutex_unlock(&inode->i_mutex);
+
+	return err;
+}
+#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 1, 0)) */
 
 static struct file_operations vmw_fb_local_fops;
 static const struct file_operations *vmw_fb_fops;
@@ -219,7 +242,11 @@ static int fb_deferred_io_mmap(struct fb_info *info, struct vm_area_struct *vma)
 
 	if (unlikely(vmw_fb_fops == NULL)) {
 		vmw_fb_local_fops = *vma->vm_file->f_op;
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 1, 0))
+		vmw_fb_local_fops.fsync = &vmw_fb_deferred_io_fsync_31;
+#else
 		vmw_fb_local_fops.fsync = &vmw_fb_deferred_io_fsync;
+#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 1, 0)) */
 		vmw_fb_fops = &vmw_fb_local_fops;
 	}
 
@@ -283,8 +310,12 @@ void vmw_fb_deferred_io_cleanup(struct fb_info *info)
 	int i;
 
 	BUG_ON(!fbdefio);
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 37))
+	cancel_delayed_work_sync(&par->deferred_work);
+#else
 	cancel_delayed_work(&par->deferred_work);
 	flush_scheduled_work();
+#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 37)) */
 
 	/* clear out the mapping that we setup */
 	for (i = 0 ; i < info->fix.smem_len; i += PAGE_SIZE) {
