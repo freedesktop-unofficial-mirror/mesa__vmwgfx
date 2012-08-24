@@ -1586,16 +1586,18 @@ int vmw_dmabuf_init(struct vmw_private *dev_priv,
 				(size + PAGE_SIZE - 1) >> PAGE_SHIFT);
 
 	ret = ttm_mem_global_alloc(mem_glob, acc_size, false, false);
+
+	memset(vmw_bo, 0, sizeof(*vmw_bo));
+	INIT_LIST_HEAD(&vmw_bo->validate_list);
+	vmw_bo->base.acc_size = acc_size;
+	vmw_bo->base.glob = bdev->glob;
+
 	if (unlikely(ret != 0)) {
 		/* we must free the bo here as
 		 * ttm_buffer_object_init does so as well */
 		bo_free(&vmw_bo->base);
 		return ret;
 	}
-
-	memset(vmw_bo, 0, sizeof(*vmw_bo));
-
-	INIT_LIST_HEAD(&vmw_bo->validate_list);
 
 	ret = ttm_bo_init(bdev, &vmw_bo->base, size,
 			  ttm_bo_type_device, placement,
