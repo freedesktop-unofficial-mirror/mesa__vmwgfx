@@ -125,6 +125,9 @@ int drm_ht_insert_item(struct drm_open_hash *ht, struct drm_hash_item *item)
 	} else {
 		hlist_add_head(&item->head, h_list);
 	}
+
+	ht->fill++;
+
 	return 0;
 }
 EXPORT_SYMBOL(drm_ht_insert_item);
