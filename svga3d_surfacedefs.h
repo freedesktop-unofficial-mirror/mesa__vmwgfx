@@ -700,6 +700,22 @@ static const struct svga3d_surface_desc svga3d_surface_descs[] = {
 	{SVGA3DBLOCKDESC_DS,
 	 {1, 1, 1},  4, 4, {32, {{0}, {8}, {24}, {0} } },
 	 {{{0}, {24}, {0}, {0} } } },    /* SVGA3D_Z_D24S8_INT */
+
+	{SVGA3DBLOCKDESC_YV12,
+	 {2, 2, 1},  6, 2, {48, {{0}, {0}, {48}, {0} } },
+	 {{{0}, {0}, {0}, {0} } } },     /* SVGA3D_YV12 */
+
+	{SVGA3DBLOCKDESC_BUFFER,
+	 {1, 1, 1},  16, 16, {128, {{0}, {0}, {128}, {0} } },
+	 {{{0}, {0}, {0}, {0} } } },     /* SVGA3D_SURFACE_SHADERCONST_FLOAT */
+
+	{SVGA3DBLOCKDESC_BUFFER,
+	 {1, 1, 1},  16, 16, {128, {{0}, {0}, {128}, {0} } },
+	 {{{0}, {0}, {0}, {0} } } },     /* SVGA3D_SURFACE_SHADERCONST_INT */
+
+	{SVGA3DBLOCKDESC_BUFFER,
+	 {1, 1, 1},  4, 4, {32, {{0}, {0}, {32}, {0} } },
+	 {{{0}, {0}, {0}, {0} } } },     /* SVGA3D_SURFACE_SHADERCONST_BOOL */
 };
 
 static inline u32 clamped_umul32(u32 a, u32 b)
