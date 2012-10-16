@@ -343,6 +343,14 @@ static int vmw_request_device(struct vmw_private *dev_priv)
 		return ret;
 	}
 	vmw_fence_fifo_up(dev_priv->fman);
+	if (dev_priv->has_mob) {
+		ret = vmw_otables_setup(dev_priv);
+		if (unlikely(ret != 0)) {
+			DRM_ERROR("Unable to initialize "
+				  "guest Memory OBjects.\n");
+			goto out_no_mob;
+		}
+	}
 	ret = vmw_dummy_query_bo_create(dev_priv);
 	if (unlikely(ret != 0))
 		goto out_no_query_bo;
@@ -351,6 +359,9 @@ static int vmw_request_device(struct vmw_private *dev_priv)
 	return 0;
 
 out_no_query_bo:
+	if (dev_priv->has_mob)
+		vmw_otables_takedown(dev_priv);
+out_no_mob:
 	vmw_fence_fifo_down(dev_priv->fman);
 	vmw_fifo_release(dev_priv, &dev_priv->fifo);
 	return ret;
@@ -366,9 +377,12 @@ static void vmw_release_device(struct vmw_private *dev_priv)
 	BUG_ON(dev_priv->pinned_bo != NULL);
 
 	ttm_bo_unref(&dev_priv->dummy_query_bo);
+	if (dev_priv->has_mob)
+		vmw_otables_takedown(dev_priv);
 	vmw_fence_fifo_down(dev_priv->fman);
 	vmw_fifo_release(dev_priv, &dev_priv->fifo);
 }
+
 
 /**
  * Increase the 3d resource refcount.
@@ -677,6 +691,9 @@ static int vmw_driver_load(struct drm_device *dev, unsigned long chipset)
 			 "Graphics memory resources are very limited.\n");
 		dev_priv->has_gmr = false;
 	}
+
+	if (dev_priv->capabilities & SVGA_CAP_GBOBJECTS)
+		dev_priv->has_mob = true;
 
 	dev_priv->mmio_mtrr = drm_mtrr_add(dev_priv->mmio_start,
 					   dev_priv->mmio_size, DRM_MTRR_WC);
