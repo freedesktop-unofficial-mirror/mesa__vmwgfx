@@ -20,7 +20,7 @@ vmwgfx-objs    := drm_auth.o drm_bufs.o drm_context.o drm_crtc.o \
 		vmwgfx_irq.o vmwgfx_kms.o vmwgfx_ldu.o vmwgfx_fb.o \
 		vmwgfx_overlay.o vmwgfx_marker.o vmwgfx_defio.o \
 		vmwgfx_gmrid_manager.o vmwgfx_fence.o vmwgfx_dmabuf.o \
-		vmwgfx_scrn.o
+		vmwgfx_scrn.o vmwgfx_surface.o vmwgfx_context.o
 
 ifeq ($(CONFIG_COMPAT),y)
 vmwgfx-objs    += drm_ioc32.o

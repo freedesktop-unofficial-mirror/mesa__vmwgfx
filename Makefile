@@ -64,7 +64,8 @@ TTMHEADERS  =   ttm/ttm_bo_api.h ttm/ttm_bo_driver.h\
 		ttm/ttm_bo_user_helper.h ttm/ttm_execbuf_util.h\
 		ttm/ttm_lock.h ttm/ttm_memory.h ttm/ttm_module.h\
 	        ttm/ttm_object.h ttm/ttm_pat_compat.h ttm/ttm_placement.h
-VMWGFXHEADERS = vmwgfx_drv.h vmwgfx_reg.h vmwgfx_drm.h
+VMWGFXHEADERS = vmwgfx_drv.h vmwgfx_reg.h vmwgfx_drm.h\
+		vmwgfx_resource_priv.h
 
 CLEANFILES = *.o *.ko .depend .*.flags .*.d .*.cmd *.mod.c .tmp_versions\
 	Module.markers modules.order Module.symvers 
