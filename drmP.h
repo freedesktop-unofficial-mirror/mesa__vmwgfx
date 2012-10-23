@@ -1327,8 +1327,6 @@ extern int drm_markbufs(struct drm_device *dev, void *data,
 			struct drm_file *file_priv);
 extern int drm_freebufs(struct drm_device *dev, void *data,
 			struct drm_file *file_priv);
-extern int drm_mapbufs(struct drm_device *dev, void *data,
-		       struct drm_file *file_priv);
 extern int drm_order(unsigned long size);
 extern resource_size_t drm_get_resource_start(struct drm_device *dev,
 					      unsigned int resource);
