@@ -270,7 +270,11 @@ static int ttm_copy_io_ttm_page(struct ttm_tt *ttm, void *src,
 	memcpy_fromio(dst, src, PAGE_SIZE);
 
 #ifdef CONFIG_X86
+#ifdef VMW_HAS_STACK_KMAP_ATOMIC
+	kunmap_atomic(dst);
+#else
 	kunmap_atomic(dst, KM_USER0);
+#endif /* VMW_HAS_STACK_KMAP_ATOMIC */
 #else
 	if (pgprot_val(prot) != pgprot_val(PAGE_KERNEL))
 		vunmap(dst);
@@ -310,7 +314,11 @@ static int ttm_copy_ttm_io_page(struct ttm_tt *ttm, void *dst,
 	memcpy_toio(dst, src, PAGE_SIZE);
 
 #ifdef CONFIG_X86
+#ifdef VMW_HAS_STACK_KMAP_ATOMIC
+	kunmap_atomic(src);
+#else
 	kunmap_atomic(src, KM_USER0);
+#endif
 #else
 	if (pgprot_val(prot) != pgprot_val(PAGE_KERNEL))
 		vunmap(src);

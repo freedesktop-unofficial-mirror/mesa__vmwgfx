@@ -136,10 +136,18 @@ static int vmw_gmr_build_descriptors(struct list_head *desc_pages,
 
 		if (likely(page_virtual != NULL)) {
 			desc_virtual->ppn = page_to_pfn(page);
+#ifdef VMW_HAS_STACK_KMAP_ATOMIC
+			kunmap_atomic(page_virtual);
+#else
 			kunmap_atomic(page_virtual, KM_USER0);
+#endif
 		}
 
+#ifdef VMW_HAS_STACK_KMAP_ATOMIC
+		page_virtual = kmap_atomic(page);
+#else
 		page_virtual = kmap_atomic(page, KM_USER0);
+#endif
 		desc_virtual = page_virtual - 1;
 		prev_pfn = ~(0UL);
 
@@ -169,7 +177,11 @@ static int vmw_gmr_build_descriptors(struct list_head *desc_pages,
 	}
 
 	if (likely(page_virtual != NULL))
+#ifdef VMW_HAS_STACK_KMAP_ATOMIC
+		kunmap_atomic(page_virtual);
+#else
 		kunmap_atomic(page_virtual, KM_USER0);
+#endif
 
 	return 0;
 out_err:

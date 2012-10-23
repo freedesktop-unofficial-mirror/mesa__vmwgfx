@@ -489,11 +489,21 @@ static int ttm_tt_swapin(struct ttm_tt *ttm)
 			goto out_err;
 
 		preempt_disable();
+#ifdef VMW_HAS_STACK_KMAP_ATOMIC
+		from_virtual = kmap_atomic(from_page);
+		to_virtual = kmap_atomic(to_page);
+#else
 		from_virtual = kmap_atomic(from_page, KM_USER0);
 		to_virtual = kmap_atomic(to_page, KM_USER1);
+#endif
 		memcpy(to_virtual, from_virtual, PAGE_SIZE);
+#ifdef VMW_HAS_STACK_KMAP_ATOMIC
+		kunmap_atomic(to_virtual);
+		kunmap_atomic(from_virtual);
+#else
 		kunmap_atomic(to_virtual, KM_USER1);
 		kunmap_atomic(from_virtual, KM_USER0);
+#endif
 		preempt_enable();
 		page_cache_release(from_page);
 	}
@@ -558,11 +568,21 @@ int ttm_tt_swapout(struct ttm_tt *ttm, struct file *persistant_swap_storage)
 			goto out_err;
 		}
 		preempt_disable();
+#ifdef VMW_HAS_STACK_KMAP_ATOMIC
+		from_virtual = kmap_atomic(from_page);
+		to_virtual = kmap_atomic(to_page);
+#else
 		from_virtual = kmap_atomic(from_page, KM_USER0);
 		to_virtual = kmap_atomic(to_page, KM_USER1);
+#endif
 		memcpy(to_virtual, from_virtual, PAGE_SIZE);
+#ifdef VMW_HAS_STACK_KMAP_ATOMIC
+		kunmap_atomic(to_virtual);
+		kunmap_atomic(from_virtual);
+#else
 		kunmap_atomic(to_virtual, KM_USER1);
 		kunmap_atomic(from_virtual, KM_USER0);
+#endif
 		preempt_enable();
 		set_page_dirty(to_page);
 		mark_page_accessed(to_page);
