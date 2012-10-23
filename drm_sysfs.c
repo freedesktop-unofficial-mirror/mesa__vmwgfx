@@ -88,7 +88,12 @@ static CLASS_ATTR_STRING(version, S_IRUGO,
 		CORE_DATE);
 #endif
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,32))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,2,0))
+static char *drm_devnode(struct device *dev, umode_t *mode)
+{
+	return kasprintf(GFP_KERNEL, "dri/%s", dev_name(dev));
+}
+#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,32))
 static char *drm_devnode(struct device *dev, mode_t *mode)
 {
 	return kasprintf(GFP_KERNEL, "dri/%s", dev_name(dev));
