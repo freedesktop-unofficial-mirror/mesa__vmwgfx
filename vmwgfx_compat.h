@@ -312,4 +312,13 @@ static inline int vmwgfx_kref_sub(struct kref *kref, unsigned int count,
 #define shmem_read_mapping_page(_a, _b) read_mapping_page(_a, _b, NULL)
 #endif
 
+/**
+ * VM_RESERVED disappeared in 3.7, and is replaced in upstream
+ * ttm_bo_vm.c with VM_DONTDUMP. Try to keep code in sync with
+ * upstream
+ */
+#ifndef VM_DONTDUMP
+#define VM_DONTDUMP VM_RESERVED
+#endif
+
 #endif
