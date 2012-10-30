@@ -124,6 +124,9 @@
 #define DRM_IOCTL_VMW_GB_SURFACE_REF				\
 	DRM_IOWR(DRM_COMMAND_BASE + DRM_VMW_GB_SURFACE_REF,	\
 		 union drm_vmw_gb_surface_reference_arg)
+#define DRM_IOCTL_VMW_SYNCCPU					\
+	DRM_IOW(DRM_COMMAND_BASE + DRM_VMW_SYNCCPU,		\
+		 struct drm_vmw_synccpu_arg)
 
 /**
  * The core DRM version of this macro doesn't account for
@@ -202,6 +205,9 @@ static struct drm_ioctl_desc vmw_ioctls[] = {
 		      DRM_AUTH | DRM_UNLOCKED),
 	VMW_IOCTL_DEF(DRM_IOCTL_VMW_GB_SURFACE_REF,
 		      vmw_gb_surface_reference_ioctl,
+		      DRM_AUTH | DRM_UNLOCKED),
+	VMW_IOCTL_DEF(DRM_IOCTL_VMW_SYNCCPU,
+		      vmw_user_dmabuf_synccpu_ioctl,
 		      DRM_AUTH | DRM_UNLOCKED),
 };
 
