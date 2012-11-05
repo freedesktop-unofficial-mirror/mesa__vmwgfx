@@ -327,4 +327,18 @@ static inline int __must_check kref_get_unless_zero(struct kref *kref)
 	return atomic_add_unless(&kref->refcount, 1, 0);
 }
 
+/**
+ * kfree_rcu appears as a macro in v2.6.39.
+ * This version assumes (and checks) that the struct rcu_head is the
+ * first member in the structure about to be freed, so that we can just
+ * call kfree directly on the rcu_head member.
+ */
+#ifndef kfree_rcu
+#define kfree_rcu(_obj, _rcu_head)					\
+	do {								\
+		BUG_ON(offsetof(typeof(*(_obj)), _rcu_head) != 0);	\
+		call_rcu(&(_obj)->_rcu_head, (void *)kfree);		\
+	} while (0)
+#endif
+
 #endif
