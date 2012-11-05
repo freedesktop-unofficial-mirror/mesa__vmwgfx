@@ -24,6 +24,7 @@
 #include <linux/mm.h>
 #include <linux/list.h>
 #include <linux/kref.h>
+#include <linux/rcupdate.h>
 #ifndef CONFIG_FB_DEFERRED_IO
 #include <linux/fb.h>
 #endif
@@ -320,5 +321,10 @@ static inline int vmwgfx_kref_sub(struct kref *kref, unsigned int count,
 #ifndef VM_DONTDUMP
 #define VM_DONTDUMP VM_RESERVED
 #endif
+
+static inline int __must_check kref_get_unless_zero(struct kref *kref)
+{
+	return atomic_add_unless(&kref->refcount, 1, 0);
+}
 
 #endif
