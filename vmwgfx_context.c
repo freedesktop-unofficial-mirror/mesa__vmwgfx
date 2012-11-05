@@ -170,7 +170,7 @@ static void vmw_user_context_free(struct vmw_resource *res)
 	    container_of(res, struct vmw_user_context, res);
 	struct vmw_private *dev_priv = res->dev_priv;
 
-	kfree(ctx);
+	ttm_base_object_kfree(ctx, base);
 	ttm_mem_global_free(vmw_mem_glob(dev_priv),
 			    vmw_user_context_size);
 }

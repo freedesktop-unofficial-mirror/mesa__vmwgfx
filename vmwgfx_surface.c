@@ -600,7 +600,7 @@ static void vmw_user_surface_free(struct vmw_resource *res)
 	kfree(srf->offsets);
 	kfree(srf->sizes);
 	kfree(srf->snooper.image);
-	kfree(user_srf);
+	ttm_base_object_kfree(user_srf, base);
 	ttm_mem_global_free(vmw_mem_glob(dev_priv), size);
 }
 

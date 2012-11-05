@@ -424,7 +424,7 @@ static void vmw_user_dmabuf_destroy(struct ttm_buffer_object *bo)
 	struct ttm_bo_global *glob = bo->glob;
 
 	ttm_mem_global_free(glob->mem_glob, bo->acc_size);
-	kfree(vmw_user_bo);
+	ttm_base_object_kfree(vmw_user_bo, base);
 }
 
 static void vmw_user_dmabuf_release(struct ttm_base_object **p_base)
@@ -635,7 +635,7 @@ static void vmw_user_stream_free(struct vmw_resource *res)
 	    container_of(res, struct vmw_user_stream, stream.res);
 	struct vmw_private *dev_priv = res->dev_priv;
 
-	kfree(stream);
+	ttm_base_object_kfree(stream, base);
 	ttm_mem_global_free(vmw_mem_glob(dev_priv),
 			    vmw_user_stream_size);
 }
