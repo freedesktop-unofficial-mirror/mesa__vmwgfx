@@ -525,7 +525,13 @@ static int vmw_legacy_srf_destroy(struct vmw_resource *res)
 	uint32_t submit_size;
 	uint8_t *cmd;
 
-	BUG_ON(res->id == -1);
+	/*
+	 * This can happen if user space has submitted a
+	 * too large amount of resource on execbuf, causing
+	 * the resource to be allocated but not fully created.
+	 */
+	if (res->id == -1)
+		return 0;
 
 	/*
 	 * Encode the dma- and surface destroy commands.
