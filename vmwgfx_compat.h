@@ -322,6 +322,17 @@ static inline int vmwgfx_kref_sub(struct kref *kref, unsigned int count,
 #define VM_DONTDUMP VM_RESERVED
 #endif
 
+
+/*
+ * This function was at the beginning not available in
+ * older kernels, unfortunately it was backported as a security
+ * fix and as such was applied to a multitude of older kernels.
+ * There is no reliable way of detecting if the kernel have the
+ * fix or not, so we just uncoditionally do this workaround.
+ */
+#include "linux/kref.h"
+#define kref_get_unless_zero vmwgfx_standalone_kref_get_unless_zero
+
 static inline int __must_check kref_get_unless_zero(struct kref *kref)
 {
 	return atomic_add_unless(&kref->refcount, 1, 0);
