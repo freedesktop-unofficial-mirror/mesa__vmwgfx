@@ -74,7 +74,11 @@ void drm_ht_verbose_list(struct drm_open_hash *ht, unsigned long key)
 	hashed_key = hash_long(key, ht->order);
 	DRM_DEBUG("Key is 0x%08lx, Hashed key is 0x%08x\n", key, hashed_key);
 	h_list = &ht->table[hashed_key];
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3,9,0))
 	hlist_for_each_entry(entry, list, h_list, head)
+#else
+	hlist_for_each_entry(entry, h_list, head)
+#endif
 		DRM_DEBUG("count %d, key: 0x%08lx\n", count++, entry->key);
 }
 
@@ -88,9 +92,13 @@ static struct hlist_node *drm_ht_find_key(struct drm_open_hash *ht,
 
 	hashed_key = hash_long(key, ht->order);
 	h_list = &ht->table[hashed_key];
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3,9,0))
 	hlist_for_each_entry(entry, list, h_list, head) {
+#else
+	hlist_for_each_entry(entry, h_list, head) {
+#endif
 		if (entry->key == key)
-			return list;
+			return &entry->head;
 		if (entry->key > key)
 			break;
 	}
@@ -107,9 +115,13 @@ static struct hlist_node *drm_ht_find_key_rcu(struct drm_open_hash *ht,
 
 	hashed_key = hash_long(key, ht->order);
 	h_list = &ht->table[hashed_key];
-	hlist_for_each_entry_rcu(entry, list, h_list, head) {
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3,9,0))
+	hlist_for_each_entry(entry, list, h_list, head) {
+#else
+	hlist_for_each_entry(entry, h_list, head) {
+#endif
 		if (entry->key == key)
-			return list;
+			return &entry->head;
 		if (entry->key > key)
 			break;
 	}
@@ -127,12 +139,16 @@ int drm_ht_insert_item(struct drm_open_hash *ht, struct drm_hash_item *item)
 	hashed_key = hash_long(key, ht->order);
 	h_list = &ht->table[hashed_key];
 	parent = NULL;
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3,9,0))
 	hlist_for_each_entry(entry, list, h_list, head) {
+#else
+	hlist_for_each_entry(entry, h_list, head) {
+#endif
 		if (entry->key == key)
 			return -EINVAL;
 		if (entry->key > key)
 			break;
-		parent = list;
+		parent = &entry->head;
 	}
 	if (parent) {
 		hlist_add_after_rcu(parent, &item->head);
