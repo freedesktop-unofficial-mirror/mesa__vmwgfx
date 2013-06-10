@@ -189,7 +189,11 @@ MODULE_DEVICE_TABLE(pci, vmw_pci_id_list);
 #endif
 
 static char *vmw_devname = "vmwgfx";
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,6,0))
+static int enable_fbdev = IS_ENABLED(CONFIG_DRM_VMWGFX_FBCON);
+#else
 static int enable_fbdev;
+#endif
 #ifdef VMWGFX_STANDALONE
 static int force_stealth;
 int force_no_3d;
