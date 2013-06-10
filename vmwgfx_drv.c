@@ -184,6 +184,9 @@ static struct pci_device_id vmw_pci_id_list[] = {
 	{0x15ad, 0x0405, PCI_ANY_ID, PCI_ANY_ID, 0, 0, VMWGFX_CHIP_SVGAII},
 	{0, 0, 0}
 };
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,6,0))
+MODULE_DEVICE_TABLE(pci, vmw_pci_id_list);
+#endif
 
 static char *vmw_devname = "vmwgfx";
 static int enable_fbdev;
