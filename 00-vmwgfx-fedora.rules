@@ -1,0 +1,1 @@
+SUBSYSTEM=="vmwgfx", KERNEL=="card*", TAG+="uaccess"
