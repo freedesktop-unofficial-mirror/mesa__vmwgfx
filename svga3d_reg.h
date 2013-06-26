@@ -2519,6 +2519,16 @@ typedef enum {
     */
    SVGA3D_DEVCAP_SCREENTARGETS                     = 93,
 
+   /*
+    * Are TS_CONSTANT, TS_COLOR_KEY, and TS_COLOR_KEY_ENABLE supported?
+    */
+   SVGA3D_DEVCAP_TS_COLOR_KEY                      = 94, /* boolean */
+
+   /*
+    * Does the device support the DX commands?
+    */
+   SVGA3D_DEVCAP_DX                                = 95,
+
    SVGA3D_DEVCAP_MAX                                  /* This must be the last index. */
 } SVGA3dDevCapIndex;
 
