@@ -418,7 +418,6 @@ struct vmw_user_resource_conv;
 extern const struct vmw_user_resource_conv *user_surface_converter;
 extern const struct vmw_user_resource_conv *user_context_converter;
 
-extern struct vmw_resource *vmw_context_alloc(struct vmw_private *dev_priv);
 extern void vmw_resource_unreference(struct vmw_resource **p_res);
 extern struct vmw_resource *vmw_resource_reference(struct vmw_resource *res);
 extern int vmw_resource_validate(struct vmw_resource *res);

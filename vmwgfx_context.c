@@ -141,18 +141,6 @@ out_early:
 	return ret;
 }
 
-struct vmw_resource *vmw_context_alloc(struct vmw_private *dev_priv)
-{
-	struct vmw_resource *res = kmalloc(sizeof(*res), GFP_KERNEL);
-	int ret;
-
-	if (unlikely(res == NULL))
-		return NULL;
-
-	ret = vmw_context_init(dev_priv, res, NULL);
-
-	return (ret == 0) ? res : NULL;
-}
 
 /**
  * User-space context management:
