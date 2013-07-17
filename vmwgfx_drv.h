@@ -869,8 +869,6 @@ extern void vmw_otables_takedown(struct vmw_private *dev_priv);
 
 extern const struct vmw_user_resource_conv *user_context_converter;
 
-extern struct vmw_resource *vmw_context_alloc(struct vmw_private *dev_priv);
-
 extern int vmw_context_check(struct vmw_private *dev_priv,
 			     struct ttm_object_file *tfile,
 			     int id,

@@ -196,8 +196,6 @@ out_early:
 	return ret;
 }
 
-
-
 static int vmw_gb_context_create(struct vmw_resource *res)
 {
 	struct vmw_private *dev_priv = res->dev_priv;
