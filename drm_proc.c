@@ -61,7 +61,7 @@ static struct drm_info_list drm_proc_list[] = {
 
 static int drm_proc_open(struct inode *inode, struct file *file)
 {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,11,0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,10,0)
 	struct drm_info_node* node = PDE_DATA(inode);
 #else
 	struct drm_info_node* node = PDE(inode)->data;
