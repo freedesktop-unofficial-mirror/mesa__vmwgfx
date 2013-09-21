@@ -39,9 +39,6 @@
 #undef EXPORT_SYMBOL
 #define EXPORT_SYMBOL(_sym)
 
-#undef DRM_UNLOCKED
-#define DRM_UNLOCKED 0
-
 #define drm_get_pci_dev(_pdev, _ent, _driver) \
 	drm_get_dev(_pdev, _ent, _driver);
 
