@@ -145,7 +145,200 @@ struct vmw_ttm_backend {
 	unsigned long num_pages;
 	struct vmw_private *dev_priv;
 	int gmr_id;
+	struct sg_table sgt;
+	struct vmw_sg_table vsgt;
+	uint64_t sg_alloc_size;
 };
+
+
+/**
+ * vmw_ttm_map_phys - get untranslated device addresses for TTM pages
+ *
+ * @vmw_be: Pointer to a struct vmw_ttm_backend
+ *
+ * This function should be used to obtain untranslated device addresses
+ * for the TTM pages. Should be used when IOMMU remapping is not
+ * desired.
+ */
+static void vmw_ttm_map_phys(struct vmw_ttm_backend *vmw_be)
+{
+	struct scatterlist *sgl = vmw_be->vsgt.sgt->sgl;
+
+	if (unlikely(sgl == NULL))
+		return;
+
+	do {
+		sgl->dma_address = sg_phys(sgl);
+		if (sg_is_last(sgl))
+			break;
+		if (sg_is_chain(sgl))
+			sgl = sg_chain_ptr(sgl);
+		else
+			sgl++;
+	} while (true);
+}
+
+/**
+ * vmw_ttm_unmap_from_dma - unmap  device addresses previsouly mapped for
+ * TTM pages
+ *
+ * @vmw_be: Pointer to a struct vmw_ttm_backend
+ *
+ * Used to free dma mappings previously mapped by vmw_ttm_map_for_dma.
+ */
+static void vmw_ttm_unmap_from_dma(struct vmw_ttm_backend *vmw_be)
+{
+	struct device *dev = vmw_be->dev_priv->dev->dev;
+
+	dma_unmap_sg(dev, vmw_be->sgt.sgl, vmw_be->sgt.nents,
+		DMA_BIDIRECTIONAL);
+	vmw_be->sgt.nents = vmw_be->sgt.orig_nents;
+}
+
+/**
+ * vmw_ttm_map_for_dma - map TTM pages to get device addresses
+ *
+ * @vmw_be: Pointer to a struct vmw_ttm_backend
+ *
+ * This function is used to get device addresses from the kernel DMA layer.
+ * However, it's violating the DMA API in that when this operation has been
+ * performed, it's illegal for the CPU to write to the pages without first
+ * unmapping the DMA mappings, or calling dma_sync_sg_for_cpu(). It is
+ * therefore only legal to call this function if we know that the function
+ * dma_sync_sg_for_cpu() is a NOP, and dma_sync_sg_for_device() is at most
+ * a CPU write buffer flush.
+ */
+static int vmw_ttm_map_for_dma(struct vmw_ttm_backend *vmw_be)
+{
+	struct device *dev = vmw_be->dev_priv->dev->dev;
+	int ret;
+
+	ret = dma_map_sg(dev, vmw_be->sgt.sgl, vmw_be->sgt.orig_nents,
+			 DMA_BIDIRECTIONAL);
+	if (unlikely(ret == 0))
+		return -ENOMEM;
+
+	vmw_be->sgt.nents = ret;
+
+	return 0;
+}
+
+/**
+ * vmw_ttm_map_dma - Make sure TTM pages are visible to the device
+ *
+ * @vmw_be: Pointer to a struct vmw_ttm_backend
+ *
+ * Select the correct function for and make sure the TTM pages are
+ * visible to the device. Allocate storage for the device mappings.
+ * If a mapping has already been performed, indicated by the storage
+ * pointer being non NULL, the function returns success.
+ */
+static int vmw_ttm_map_dma(struct vmw_ttm_backend *vmw_be)
+{
+	struct vmw_private *dev_priv = vmw_be->dev_priv;
+	struct ttm_mem_global *glob = vmw_mem_glob(dev_priv);
+	struct sg_page_iter iter;
+	dma_addr_t old;
+	int ret = 0;
+	static size_t sgl_size;
+	static size_t sgt_size;
+
+	if (vmw_be->vsgt.sgt)
+		return 0;
+
+	if (unlikely(!sgl_size)) {
+		sgl_size = ttm_round_pot(sizeof(struct scatterlist));
+		sgt_size = ttm_round_pot(sizeof(struct sg_table));
+	}
+
+	vmw_be->sg_alloc_size = sgt_size + sgl_size * vmw_be->num_pages;
+	ret = ttm_mem_global_alloc(glob, vmw_be->sg_alloc_size, false, true);
+	if (unlikely(ret != 0))
+		return ret;
+
+	ret = sg_alloc_table_from_pages(&vmw_be->sgt, vmw_be->pages,
+					vmw_be->num_pages, 0,
+					(unsigned long)
+					vmw_be->num_pages << PAGE_SHIFT,
+					GFP_KERNEL);
+	if (unlikely(ret != 0))
+		goto out_sg_alloc_fail;
+
+	if (vmw_be->num_pages > vmw_be->sgt.nents) {
+		uint64_t over_alloc =
+			sgl_size * (vmw_be->num_pages - vmw_be->sgt.nents);
+
+		ttm_mem_global_free(glob, over_alloc);
+		vmw_be->sg_alloc_size -= over_alloc;
+	}
+
+	vmw_be->vsgt.sgt = &vmw_be->sgt;
+
+	switch (dev_priv->map_mode) {
+	case vmw_dma_map_bind:
+	case vmw_dma_map_populate:
+		ret = vmw_ttm_map_for_dma(vmw_be);
+		break;
+	case vmw_dma_phys:
+		vmw_ttm_map_phys(vmw_be);
+		break;
+	default:
+		BUG();
+	}
+
+	if (unlikely(ret != 0))
+		goto out_map_fail;
+
+	old = ~((dma_addr_t) 0);
+	vmw_be->vsgt.num_regions = 0;
+	for_each_sg_page(vmw_be->sgt.sgl, &iter, vmw_be->sgt.orig_nents, 0) {
+		dma_addr_t cur = sg_page_iter_dma_address(&iter);
+		if (cur != old + PAGE_SIZE)
+			vmw_be->vsgt.num_regions++;
+		old = cur;
+	}
+
+	return 0;
+
+out_map_fail:
+	sg_free_table(vmw_be->vsgt.sgt);
+	vmw_be->vsgt.sgt = NULL;
+out_sg_alloc_fail:
+	ttm_mem_global_free(glob, vmw_be->sg_alloc_size);
+	return ret;
+}
+
+/**
+ * vmw_ttm_unmap_dma - Tear down any TTM page device mappings
+ *
+ * @vmw_be: Pointer to a struct vmw_ttm_backend
+ *
+ * Tear down any previously set up device DMA mappings and free
+ * any storage space allocated for them. If there are no mappings set up,
+ * this function is a NOP.
+ */
+static void vmw_ttm_unmap_dma(struct vmw_ttm_backend *vmw_be)
+{
+	struct vmw_private *dev_priv = vmw_be->dev_priv;
+
+	if (!vmw_be->vsgt.sgt)
+		return;
+
+	switch (dev_priv->map_mode) {
+	case vmw_dma_map_bind:
+	case vmw_dma_map_populate:
+		vmw_ttm_unmap_from_dma(vmw_be);
+		/* Fall through */
+	case vmw_dma_phys:
+		sg_free_table(vmw_be->vsgt.sgt);
+		ttm_mem_global_free(vmw_mem_glob(dev_priv),
+				    vmw_be->sg_alloc_size);
+		vmw_be->vsgt.sgt = NULL;
+		break;
+	default:
+		break;
+	}
+}
 
 static int vmw_ttm_populate(struct ttm_backend *backend,
 			    unsigned long num_pages, struct page **pages,
@@ -153,9 +346,14 @@ static int vmw_ttm_populate(struct ttm_backend *backend,
 {
 	struct vmw_ttm_backend *vmw_be =
 	    container_of(backend, struct vmw_ttm_backend, backend);
+	struct vmw_private *dev_priv = vmw_be->dev_priv;
 
 	vmw_be->pages = pages;
 	vmw_be->num_pages = num_pages;
+
+	if (dev_priv->map_mode == vmw_dma_phys ||
+	    dev_priv->map_mode == vmw_dma_map_populate)
+		return vmw_ttm_map_dma(vmw_be);
 
 	return 0;
 }
@@ -164,10 +362,15 @@ static int vmw_ttm_bind(struct ttm_backend *backend, struct ttm_mem_reg *bo_mem)
 {
 	struct vmw_ttm_backend *vmw_be =
 	    container_of(backend, struct vmw_ttm_backend, backend);
+	int ret;
+
+	ret = vmw_ttm_map_dma(vmw_be);
+	if (unlikely(ret != 0))
+		return ret;
 
 	vmw_be->gmr_id = bo_mem->start;
 
-	return vmw_gmr_bind(vmw_be->dev_priv, vmw_be->pages,
+	return vmw_gmr_bind(vmw_be->dev_priv, &vmw_be->vsgt,
 			    vmw_be->num_pages, vmw_be->gmr_id);
 }
 
@@ -177,6 +380,10 @@ static int vmw_ttm_unbind(struct ttm_backend *backend)
 	    container_of(backend, struct vmw_ttm_backend, backend);
 
 	vmw_gmr_unbind(vmw_be->dev_priv, vmw_be->gmr_id);
+
+	if (vmw_be->dev_priv->map_mode == vmw_dma_map_bind)
+		vmw_ttm_unmap_dma(vmw_be);
+
 	return 0;
 }
 
@@ -184,6 +391,8 @@ static void vmw_ttm_clear(struct ttm_backend *backend)
 {
 	struct vmw_ttm_backend *vmw_be =
 		container_of(backend, struct vmw_ttm_backend, backend);
+
+	vmw_ttm_unmap_dma(vmw_be);
 
 	vmw_be->pages = NULL;
 	vmw_be->num_pages = 0;
@@ -209,7 +418,7 @@ struct ttm_backend *vmw_ttm_backend_init(struct ttm_bo_device *bdev)
 {
 	struct vmw_ttm_backend *vmw_be;
 
-	vmw_be = kmalloc(sizeof(*vmw_be), GFP_KERNEL);
+	vmw_be = kzalloc(sizeof(*vmw_be), GFP_KERNEL);
 	if (!vmw_be)
 		return NULL;
 

@@ -26,15 +26,17 @@
  **************************************************************************/
 
 #include "vmwgfx_drv.h"
-#include "drmP.h"
-#include "ttm/ttm_bo_driver.h"
+#include <drmP.h>
+#include <ttm/ttm_bo_driver.h>
 
 #define VMW_PPN_SIZE (sizeof(unsigned long))
 /* A future safe maximum remap size. */
 #define VMW_PPN_PER_REMAP ((31 * 1024) / VMW_PPN_SIZE)
+#define DMA_ADDR_INVALID ((dma_addr_t) 0)
+#define DMA_PAGE_INVALID 0UL
 
 static int vmw_gmr2_bind(struct vmw_private *dev_priv,
-			 struct page *pages[],
+			 struct sg_page_iter *iter,
 			 unsigned long num_pages,
 			 int gmr_id)
 {
@@ -81,11 +83,15 @@ static int vmw_gmr2_bind(struct vmw_private *dev_priv,
 
 		for (i = 0; i < nr; ++i) {
 			if (VMW_PPN_SIZE <= 4)
-				*cmd = page_to_pfn(*pages++);
+				*cmd = sg_page_iter_dma_address(iter) >>
+					PAGE_SHIFT;
 			else
-				*((uint64_t *)cmd) = page_to_pfn(*pages++);
+				*((uint64_t *)cmd) =
+					sg_page_iter_dma_address(iter) >>
+					PAGE_SHIFT;
 
 			cmd += VMW_PPN_SIZE / sizeof(*cmd);
+			__sg_page_iter_next(iter);
 		}
 
 		num_pages -= nr;
@@ -120,22 +126,62 @@ static void vmw_gmr2_unbind(struct vmw_private *dev_priv,
 	vmw_fifo_commit(dev_priv, define_size);
 }
 
+
+static void vmw_gmr_free_descriptors(struct device *dev, dma_addr_t desc_dma,
+				     struct list_head *desc_pages)
+{
+	struct page *page, *next;
+	struct svga_guest_mem_descriptor *page_virtual;
+	unsigned int desc_per_page = PAGE_SIZE /
+		sizeof(struct svga_guest_mem_descriptor) - 1;
+
+	if (list_empty(desc_pages))
+		return;
+
+	list_for_each_entry_safe(page, next, desc_pages, lru) {
+		list_del_init(&page->lru);
+
+		if (likely(desc_dma != DMA_ADDR_INVALID)) {
+			dma_unmap_page(dev, desc_dma, PAGE_SIZE,
+				       DMA_TO_DEVICE);
+		}
+
+#ifdef VMW_HAS_STACK_KMAP_ATOMIC
+		page_virtual = kmap_atomic(page);
+#else
+		page_virtual = kmap_atomic(page, KM_USER0);
+#endif
+		desc_dma = page_virtual[desc_per_page].ppn << PAGE_SHIFT;
+#ifdef VMW_HAS_STACK_KMAP_ATOMIC
+		kunmap_atomic(page_virtual);
+#else
+		kunmap_atomic(page_virtual, KM_USER0);
+#endif
+
+		__free_page(page);
+	}
+}
+
 /**
  * FIXME: Adjust to the ttm lowmem / highmem storage to minimize
  * the number of used descriptors.
+ *
  */
 
-static int vmw_gmr_build_descriptors(struct list_head *desc_pages,
-				     struct page *pages[],
-				     unsigned long num_pages)
+static int vmw_gmr_build_descriptors(struct device *dev,
+				     struct list_head *desc_pages,
+				     struct sg_page_iter *iter,
+				     unsigned long num_pages,
+				     dma_addr_t *first_dma)
 {
-	struct page *page, *next;
+	struct page *page;
 	struct svga_guest_mem_descriptor *page_virtual = NULL;
 	struct svga_guest_mem_descriptor *desc_virtual = NULL;
 	unsigned int desc_per_page;
 	unsigned long prev_pfn;
 	unsigned long pfn;
 	int ret;
+	dma_addr_t desc_dma;
 
 	desc_per_page = PAGE_SIZE /
 	    sizeof(struct svga_guest_mem_descriptor) - 1;
@@ -148,21 +194,6 @@ static int vmw_gmr_build_descriptors(struct list_head *desc_pages,
 		}
 
 		list_add_tail(&page->lru, desc_pages);
-
-		/*
-		 * Point previous page terminating descriptor to this
-		 * page before unmapping it.
-		 */
-
-		if (likely(page_virtual != NULL)) {
-			desc_virtual->ppn = page_to_pfn(page);
-#ifdef VMW_HAS_STACK_KMAP_ATOMIC
-			kunmap_atomic(page_virtual);
-#else
-			kunmap_atomic(page_virtual, KM_USER0);
-#endif
-		}
-
 #ifdef VMW_HAS_STACK_KMAP_ATOMIC
 		page_virtual = kmap_atomic(page);
 #else
@@ -172,7 +203,7 @@ static int vmw_gmr_build_descriptors(struct list_head *desc_pages,
 		prev_pfn = ~(0UL);
 
 		while (likely(num_pages != 0)) {
-			pfn = page_to_pfn(*pages);
+			pfn = sg_page_iter_dma_address(iter) >> PAGE_SHIFT;
 
 			if (pfn != prev_pfn + 1) {
 
@@ -189,108 +220,96 @@ static int vmw_gmr_build_descriptors(struct list_head *desc_pages,
 			}
 			prev_pfn = pfn;
 			--num_pages;
-			++pages;
+			__sg_page_iter_next(iter);
 		}
 
-		(++desc_virtual)->ppn = cpu_to_le32(0);
+		(++desc_virtual)->ppn = DMA_PAGE_INVALID;
 		desc_virtual->num_pages = cpu_to_le32(0);
-	}
-
-	if (likely(page_virtual != NULL))
 #ifdef VMW_HAS_STACK_KMAP_ATOMIC
 		kunmap_atomic(page_virtual);
 #else
 		kunmap_atomic(page_virtual, KM_USER0);
 #endif
+	}
+
+	desc_dma = 0;
+	list_for_each_entry_reverse(page, desc_pages, lru) {
+#ifdef VMW_HAS_STACK_KMAP_ATOMIC
+		page_virtual = kmap_atomic(page);
+#else
+		page_virtual = kmap_atomic(page, KM_USER0);
+#endif
+		page_virtual[desc_per_page].ppn = desc_dma >> PAGE_SHIFT;
+#ifdef VMW_HAS_STACK_KMAP_ATOMIC
+		kunmap_atomic(page_virtual);
+#else
+		kunmap_atomic(page_virtual, KM_USER0);
+#endif
+		desc_dma = dma_map_page(dev, page, 0, PAGE_SIZE,
+					DMA_TO_DEVICE);
+
+		if (unlikely(dma_mapping_error(dev, desc_dma)))
+			goto out_err;
+	}
+	*first_dma = desc_dma;
 
 	return 0;
+
 out_err:
-	list_for_each_entry_safe(page, next, desc_pages, lru) {
-		list_del_init(&page->lru);
-		__free_page(page);
-	}
+	vmw_gmr_free_descriptors(dev, DMA_ADDR_INVALID, desc_pages);
 	return ret;
 }
 
-static inline void vmw_gmr_free_descriptors(struct list_head *desc_pages)
-{
-	struct page *page, *next;
-
-	list_for_each_entry_safe(page, next, desc_pages, lru) {
-		list_del_init(&page->lru);
-		__free_page(page);
-	}
-}
 
 static void vmw_gmr_fire_descriptors(struct vmw_private *dev_priv,
-				     int gmr_id, struct list_head *desc_pages)
+				     int gmr_id, dma_addr_t desc_dma)
 {
-	struct page *page;
-
-	if (unlikely(list_empty(desc_pages)))
-		return;
-
-	page = list_entry(desc_pages->next, struct page, lru);
-
 	mutex_lock(&dev_priv->hw_mutex);
 
 	vmw_write(dev_priv, SVGA_REG_GMR_ID, gmr_id);
 	wmb();
-	vmw_write(dev_priv, SVGA_REG_GMR_DESCRIPTOR, page_to_pfn(page));
+	vmw_write(dev_priv, SVGA_REG_GMR_DESCRIPTOR, desc_dma >> PAGE_SHIFT);
 	mb();
 
 	mutex_unlock(&dev_priv->hw_mutex);
-
-}
-
-/**
- * FIXME: Adjust to the ttm lowmem / highmem storage to minimize
- * the number of used descriptors.
- */
-
-static unsigned long vmw_gmr_count_descriptors(struct page *pages[],
-					unsigned long num_pages)
-{
-	unsigned long prev_pfn = ~(0UL);
-	unsigned long pfn;
-	unsigned long descriptors = 0;
-
-	while (num_pages--) {
-		pfn = page_to_pfn(*pages++);
-		if (prev_pfn + 1 != pfn)
-			++descriptors;
-		prev_pfn = pfn;
-	}
-
-	return descriptors;
 }
 
 int vmw_gmr_bind(struct vmw_private *dev_priv,
-		 struct page *pages[],
+		 const struct vmw_sg_table *vsgt,
 		 unsigned long num_pages,
 		 int gmr_id)
 {
 	struct list_head desc_pages;
+	dma_addr_t desc_dma = 0;
+	struct device *dev = dev_priv->dev->dev;
+	struct sg_page_iter data_iter;
 	int ret;
 
+	__sg_page_iter_start(&data_iter, vsgt->sgt->sgl, vsgt->sgt->orig_nents,
+			     0);
+
+	if (unlikely(!__sg_page_iter_next(&data_iter)))
+		return 0;
+
 	if (likely(dev_priv->capabilities & SVGA_CAP_GMR2))
-		return vmw_gmr2_bind(dev_priv, pages, num_pages, gmr_id);
+		return vmw_gmr2_bind(dev_priv, &data_iter,
+				     num_pages, gmr_id);
 
 	if (unlikely(!(dev_priv->capabilities & SVGA_CAP_GMR)))
 		return -EINVAL;
 
-	if (vmw_gmr_count_descriptors(pages, num_pages) >
-	    dev_priv->max_gmr_descriptors)
+	if (vsgt->num_regions > dev_priv->max_gmr_descriptors)
 		return -EINVAL;
 
 	INIT_LIST_HEAD(&desc_pages);
 
-	ret = vmw_gmr_build_descriptors(&desc_pages, pages, num_pages);
+	ret = vmw_gmr_build_descriptors(dev, &desc_pages, &data_iter,
+					num_pages, &desc_dma);
 	if (unlikely(ret != 0))
 		return ret;
 
-	vmw_gmr_fire_descriptors(dev_priv, gmr_id, &desc_pages);
-	vmw_gmr_free_descriptors(&desc_pages);
+	vmw_gmr_fire_descriptors(dev_priv, gmr_id, desc_dma);
+	vmw_gmr_free_descriptors(dev, desc_dma, &desc_pages);
 
 	return 0;
 }

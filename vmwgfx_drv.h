@@ -177,6 +177,28 @@ struct vmw_res_cache_entry {
 	struct vmw_resource_val_node *node;
 };
 
+/**
+ * enum vmw_dma_map_mode - indicate how to perform TTM page dma mappings.
+ */
+enum vmw_dma_map_mode {
+	vmw_dma_phys,           /* Use physical page addresses */
+	vmw_dma_alloc_coherent, /* Use TTM coherent pages */
+	vmw_dma_map_populate,   /* Map for DMA after populate */
+	vmw_dma_map_bind        /* Map for DMA after bind */
+};
+
+/**
+ * struct vmw_sg_table - Scatter/gather table for binding, with additional
+ * device-specific information.
+ *
+ * @sgt: Pointer to a struct sg_table with binding information
+ * @num_regions: Number of regions with device-address contigous pages
+ */
+struct vmw_sg_table {
+	struct sg_table *sgt;
+	unsigned long num_regions;
+};
+
 struct vmw_sw_context{
 	struct drm_open_hash res_ht;
 	bool res_ht_initialized;
@@ -359,6 +381,11 @@ struct vmw_private {
 
 	struct list_head res_lru[vmw_res_max];
 	uint32_t used_memory_size;
+
+	/*
+	 * DMA mapping stuff.
+	 */
+	enum vmw_dma_map_mode map_mode;
 };
 
 static inline struct vmw_surface *vmw_res_to_srf(struct vmw_resource *res)
@@ -406,7 +433,7 @@ void vmw_3d_resource_dec(struct vmw_private *dev_priv, bool hide_svga);
  */
 
 extern int vmw_gmr_bind(struct vmw_private *dev_priv,
-			struct page *pages[],
+			const struct vmw_sg_table *vsgt,
 			unsigned long num_pages,
 			int gmr_id);
 extern void vmw_gmr_unbind(struct vmw_private *dev_priv, int gmr_id);

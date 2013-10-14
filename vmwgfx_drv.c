@@ -32,6 +32,7 @@
 #include "ttm/ttm_bo_driver.h"
 #include "ttm/ttm_object.h"
 #include "ttm/ttm_module.h"
+#include <linux/dma_remapping.h>
 
 #define VMWGFX_DRIVER_NAME "vmwgfx"
 #define VMWGFX_DRIVER_DESC "Linux drm driver for VMware graphics devices"
@@ -198,6 +199,8 @@ static int enable_fbdev;
 static int force_stealth;
 int force_no_3d;
 #endif
+static int vmw_bypass_iommu = 1;
+static int vmw_restrict_iommu;
 
 static int vmw_probe(struct pci_dev *, const struct pci_device_id *);
 static void vmw_master_init(struct vmw_master *);
@@ -206,6 +209,11 @@ static int vmwgfx_pm_notifier(struct notifier_block *nb, unsigned long val,
 
 MODULE_PARM_DESC(enable_fbdev, "Enable vmwgfx fbdev");
 module_param_named(enable_fbdev, enable_fbdev, int, 0600);
+MODULE_PARM_DESC(bypass_iommu, "Bypass IOMMU for TTM pages if needed");
+module_param_named(bypass_iommu, vmw_bypass_iommu, int, 0600);
+MODULE_PARM_DESC(restrict_iommu, "Try to limit IOMMU usage for TTM pages");
+module_param_named(restrict_iommu, vmw_restrict_iommu, int, 0600);
+
 
 #ifdef VMWGFX_STANDALONE
 MODULE_PARM_DESC(force_stealth, "Force stealth mode");
@@ -447,6 +455,68 @@ static void vmw_get_initial_size(struct vmw_private *dev_priv)
 	dev_priv->initial_height = height;
 }
 
+/**
+ * vmw_dma_select_mode - Determine how DMA mappings should be set up for this
+ * system.
+ *
+ * @dev_priv: Pointer to a struct vmw_private
+ *
+ * This functions tries to determine the IOMMU setup and what actions
+ * need to be taken by the driver to make system pages visible to the
+ * device.
+ * If the functions determines that streaming mappings are not possible,
+ * it will set @dev_priv->map_mode to vmw_dma_alloc_coherent, indicating
+ * that the driver should not perform any dma mapping, but instead allocate
+ * coherent system pages.
+ * If the function decides that dma mapping should be done on the TTM bind
+ * operation, then @dev_priv->map_mode is instead set to vmw_dma_map_bind.
+ * This will restrict the usage of the IOMMU aperture, but in return
+ * require more map / unmap operations.
+ * Finally, if the function decides that dma mapping should be done on the
+ * TTM populate operation then @dev_priv->map_mode is set to
+ * vmw_dma_map_bind. This means that pages should be mapped for DMA as soon
+ * as they are allocated.
+ * It's possible to prefer map_on_bind, byt setting the module parameter
+ * vmw_restrict_iommu to non-zero.
+ * If this function decides that DMA is not possible, it returns -EINVAL.
+ * The driver may then try to disable features of the device that require
+ * DMA.
+ */
+static int vmw_dma_select_mode(struct vmw_private *dev_priv)
+{
+	const struct dma_map_ops *dma_ops = get_dma_ops(dev_priv->dev->dev);
+
+	dev_priv->map_mode = vmw_dma_map_populate;
+
+	if (dma_ops->sync_single_for_cpu)
+		dev_priv->map_mode = vmw_dma_alloc_coherent;
+#ifdef CONFIG_SWIOTLB
+	if (swiotlb_nr_tbl() == 0)
+		dev_priv->map_mode = vmw_dma_map_populate;
+#endif
+
+	if (dev_priv->map_mode == vmw_dma_alloc_coherent) {
+		if (vmw_bypass_iommu) {
+			WARN_ONCE(true, "Bypassing IOMMU for TTM pages.\n");
+			dev_priv->map_mode = vmw_dma_phys;
+		} else {
+			dev_priv->map_mode = vmw_dma_alloc_coherent;
+			/* For standalone driver only */
+			return -EINVAL;
+		}
+		return 0;
+	}
+
+#ifdef CONFIG_INTEL_IOMMU
+	if (intel_iommu_enabled) {
+		dev_priv->map_mode = (vmw_restrict_iommu) ?
+			vmw_dma_map_bind : vmw_dma_map_populate;
+	}
+#endif
+
+	return 0;
+}
+
 static int vmw_driver_load(struct drm_device *dev, unsigned long chipset)
 {
 	struct vmw_private *dev_priv;
@@ -504,6 +574,11 @@ static int vmw_driver_load(struct drm_device *dev, unsigned long chipset)
 	}
 
 	dev_priv->capabilities = vmw_read(dev_priv, SVGA_REG_CAPABILITIES);
+	ret = vmw_dma_select_mode(dev_priv);
+	if (unlikely(ret != 0)) {
+		DRM_INFO("Restricting capabilities due to IOMMU setup.\n");
+		dev_priv->capabilities &= ~(SVGA_CAP_GMR | SVGA_CAP_GMR2);
+	}
 
 	dev_priv->vram_size = vmw_read(dev_priv, SVGA_REG_VRAM_SIZE);
 	dev_priv->mmio_size = vmw_read(dev_priv, SVGA_REG_MEM_SIZE);
