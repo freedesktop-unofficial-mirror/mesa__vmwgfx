@@ -453,6 +453,59 @@ static void vmw_ttm_unmap_dma(struct vmw_ttm_backend *vmw_be)
 	vmw_be->mapped = false;
 }
 
+/**
+ * vmw_bo_map_dma - Make sure buffer object pages are visible to the device
+ *
+ * @bo: Pointer to a struct ttm_buffer_object
+ *
+ * Wrapper around vmw_ttm_map_dma, that takes a TTM buffer object pointer
+ * instead of a pointer to a struct vmw_ttm_backend as argument.
+ * Note that the buffer object must be either pinned or reserved before
+ * calling this function.
+ */
+int vmw_bo_map_dma(struct ttm_buffer_object *bo)
+{
+	struct vmw_ttm_backend *vmw_be =
+		container_of(bo->ttm->be, struct vmw_ttm_backend, backend);
+
+	return vmw_ttm_map_dma(vmw_be);
+}
+
+/**
+ * vmw_bo_unmap_dma - Make sure buffer object pages are visible to the device
+ *
+ * @bo: Pointer to a struct ttm_buffer_object
+ *
+ * Wrapper around vmw_ttm_unmap_dma, that takes a TTM buffer object pointer
+ * instead of a pointer to a struct vmw_ttm_backend as argument.
+ */
+void vmw_bo_unmap_dma(struct ttm_buffer_object *bo)
+{
+	struct vmw_ttm_backend *vmw_be =
+		container_of(bo->ttm->be, struct vmw_ttm_backend, backend);
+
+	vmw_ttm_unmap_dma(vmw_be);
+}
+
+/**
+ * vmw_bo_sg_table - Return a struct vmw_sg_table object for a
+ * TTM buffer object
+ *
+ * @bo: Pointer to a struct ttm_buffer_object
+ *
+ * Returns a pointer to a struct vmw_sg_table object. The object should
+ * not be freed after use.
+ * Note that for the device addresses to be valid, the buffer object must
+ * either be reserved or pinned.
+ */
+const struct vmw_sg_table *vmw_bo_sg_table(struct ttm_buffer_object *bo)
+{
+	struct vmw_ttm_backend *vmw_be =
+		container_of(bo->ttm->be, struct vmw_ttm_backend, backend);
+
+	return &vmw_be->vsgt;
+}
+
 static int vmw_ttm_populate(struct ttm_backend *backend,
 			    unsigned long num_pages, struct page **pages,
 			    struct page *dummy_read_page)
@@ -492,7 +545,7 @@ static int vmw_ttm_bind(struct ttm_backend *backend, struct ttm_mem_reg *bo_mem)
 		}
 
 		return vmw_mob_bind(vmw_be->dev_priv, vmw_be->mob,
-				    vmw_be->pages, vmw_be->num_pages,
+				    &vmw_be->vsgt, vmw_be->num_pages,
 				    vmw_be->gmr_id);
 	default:
 		BUG();
@@ -527,12 +580,11 @@ static void vmw_ttm_clear(struct ttm_backend *backend)
 	struct vmw_ttm_backend *vmw_be =
 		container_of(backend, struct vmw_ttm_backend, backend);
 
-	vmw_ttm_unmap_dma(vmw_be);
-
 	if (vmw_be->mob) {
 		vmw_mob_destroy(vmw_be->mob);
 		vmw_be->mob = NULL;
 	}
+	vmw_ttm_unmap_dma(vmw_be);
 	vmw_be->pages = NULL;
 	vmw_be->num_pages = 0;
 }
