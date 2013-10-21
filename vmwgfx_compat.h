@@ -28,6 +28,7 @@
 #ifndef CONFIG_FB_DEFERRED_IO
 #include <linux/fb.h>
 #endif
+#include <linux/scatterlist.h>
 
 /*
  * Defines for standalone building.
@@ -349,4 +350,72 @@ static inline int __must_check kref_get_unless_zero(struct kref *kref)
 	} while (0)
 #endif
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 3, 0))
+#ifdef CONFIG_SWIOTLB
+#define swiotlb_nr_tbl() (1)
+#endif
+#endif
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 6, 0))
+int sg_alloc_table_from_pages(struct sg_table *sgt,
+			      struct page **pages, unsigned int n_pages,
+			      unsigned long offset, unsigned long size,
+			      gfp_t gfp_mask);
+#endif
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0))
+/*
+ * sg page iterator
+ *
+ * Iterates over sg entries page-by-page.  On each successful iteration,
+ * you can call sg_page_iter_page(@piter) and sg_page_iter_dma_address(@piter)
+ * to get the current page and its dma address. @piter->sg will point to the
+ * sg holding this page and @piter->sg_pgoffset to the page's page offset
+ * within the sg. The iteration will stop either when a maximum number of sg
+ * entries was reached or a terminating sg (sg_last(sg) == true) was reached.
+ */
+struct sg_page_iter {
+	struct scatterlist	*sg;		/* sg holding the page */
+	unsigned int		sg_pgoffset;	/* page offset within the sg */
+
+	/* these are internal states, keep away */
+	unsigned int		__nents;	/* remaining sg entries */
+	int			__pg_advance;	/* nr pages to advance at the
+						 * next step */
+};
+
+bool __sg_page_iter_next(struct sg_page_iter *piter);
+void __sg_page_iter_start(struct sg_page_iter *piter,
+			  struct scatterlist *sglist, unsigned int nents,
+			  unsigned long pgoffset);
+/**
+ * sg_page_iter_page - get the current page held by the page iterator
+ * @piter:	page iterator holding the page
+ */
+static inline struct page *sg_page_iter_page(struct sg_page_iter *piter)
+{
+	return nth_page(sg_page(piter->sg), piter->sg_pgoffset);
+}
+
+/**
+ * sg_page_iter_dma_address - get the dma address of the current page held by
+ * the page iterator.
+ * @piter:	page iterator holding the page
+ */
+static inline dma_addr_t sg_page_iter_dma_address(struct sg_page_iter *piter)
+{
+	return sg_dma_address(piter->sg) + (piter->sg_pgoffset << PAGE_SHIFT);
+}
+
+/**
+ * for_each_sg_page - iterate over the pages of the given sg list
+ * @sglist:	sglist to iterate over
+ * @piter:	page iterator to hold current page, sg, sg_pgoffset
+ * @nents:	maximum number of sg entries to iterate over
+ * @pgoffset:	starting page offset
+ */
+#define for_each_sg_page(sglist, piter, nents, pgoffset)		   \
+	for (__sg_page_iter_start((piter), (sglist), (nents), (pgoffset)); \
+	     __sg_page_iter_next(piter);)
+#endif
 #endif
