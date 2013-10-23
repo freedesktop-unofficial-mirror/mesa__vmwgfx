@@ -36,7 +36,7 @@
 #define DMA_PAGE_INVALID 0UL
 
 static int vmw_gmr2_bind(struct vmw_private *dev_priv,
-			 struct sg_page_iter *iter,
+			 struct vmw_piter *iter,
 			 unsigned long num_pages,
 			 int gmr_id)
 {
@@ -83,15 +83,13 @@ static int vmw_gmr2_bind(struct vmw_private *dev_priv,
 
 		for (i = 0; i < nr; ++i) {
 			if (VMW_PPN_SIZE <= 4)
-				*cmd = sg_page_iter_dma_address(iter) >>
-					PAGE_SHIFT;
+				*cmd = vmw_piter_dma_addr(iter) >> PAGE_SHIFT;
 			else
-				*((uint64_t *)cmd) =
-					sg_page_iter_dma_address(iter) >>
+				*((uint64_t *)cmd) = vmw_piter_dma_addr(iter) >>
 					PAGE_SHIFT;
 
 			cmd += VMW_PPN_SIZE / sizeof(*cmd);
-			__sg_page_iter_next(iter);
+			vmw_piter_next(iter);
 		}
 
 		num_pages -= nr;
@@ -170,7 +168,7 @@ static void vmw_gmr_free_descriptors(struct device *dev, dma_addr_t desc_dma,
 
 static int vmw_gmr_build_descriptors(struct device *dev,
 				     struct list_head *desc_pages,
-				     struct sg_page_iter *iter,
+				     struct vmw_piter *iter,
 				     unsigned long num_pages,
 				     dma_addr_t *first_dma)
 {
@@ -203,7 +201,7 @@ static int vmw_gmr_build_descriptors(struct device *dev,
 		prev_pfn = ~(0UL);
 
 		while (likely(num_pages != 0)) {
-			pfn = sg_page_iter_dma_address(iter) >> PAGE_SHIFT;
+			pfn = vmw_piter_dma_addr(iter) >> PAGE_SHIFT;
 
 			if (pfn != prev_pfn + 1) {
 
@@ -220,7 +218,7 @@ static int vmw_gmr_build_descriptors(struct device *dev,
 			}
 			prev_pfn = pfn;
 			--num_pages;
-			__sg_page_iter_next(iter);
+			vmw_piter_next(iter);
 		}
 
 		(++desc_virtual)->ppn = DMA_PAGE_INVALID;
@@ -282,13 +280,12 @@ int vmw_gmr_bind(struct vmw_private *dev_priv,
 	struct list_head desc_pages;
 	dma_addr_t desc_dma = 0;
 	struct device *dev = dev_priv->dev->dev;
-	struct sg_page_iter data_iter;
+	struct vmw_piter data_iter;
 	int ret;
 
-	__sg_page_iter_start(&data_iter, vsgt->sgt->sgl, vsgt->sgt->orig_nents,
-			     0);
+	vmw_piter_start(&data_iter, vsgt, 0);
 
-	if (unlikely(!__sg_page_iter_next(&data_iter)))
+	if (unlikely(!vmw_piter_next(&data_iter)))
 		return 0;
 
 	if (likely(dev_priv->capabilities & SVGA_CAP_GMR2))

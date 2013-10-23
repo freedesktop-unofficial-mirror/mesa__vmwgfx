@@ -406,16 +406,5 @@ static inline dma_addr_t sg_page_iter_dma_address(struct sg_page_iter *piter)
 {
 	return sg_dma_address(piter->sg) + (piter->sg_pgoffset << PAGE_SHIFT);
 }
-
-/**
- * for_each_sg_page - iterate over the pages of the given sg list
- * @sglist:	sglist to iterate over
- * @piter:	page iterator to hold current page, sg, sg_pgoffset
- * @nents:	maximum number of sg entries to iterate over
- * @pgoffset:	starting page offset
- */
-#define for_each_sg_page(sglist, piter, nents, pgoffset)		   \
-	for (__sg_page_iter_start((piter), (sglist), (nents), (pgoffset)); \
-	     __sg_page_iter_next(piter);)
 #endif
 #endif

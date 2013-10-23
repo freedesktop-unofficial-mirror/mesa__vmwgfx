@@ -148,34 +148,114 @@ struct vmw_ttm_backend {
 	struct sg_table sgt;
 	struct vmw_sg_table vsgt;
 	uint64_t sg_alloc_size;
+	bool mapped;
 };
 
 
 /**
- * vmw_ttm_map_phys - get untranslated device addresses for TTM pages
+ * Helper functions to advance a struct vmw_piter iterator.
  *
- * @vmw_be: Pointer to a struct vmw_ttm_backend
+ * @viter: Pointer to the iterator.
  *
- * This function should be used to obtain untranslated device addresses
- * for the TTM pages. Should be used when IOMMU remapping is not
- * desired.
+ * These functions return false if past the end of the list,
+ * true otherwise. Functions are selected depending on the current
+ * DMA mapping mode.
  */
-static void vmw_ttm_map_phys(struct vmw_ttm_backend *vmw_be)
+static bool __vmw_piter_non_sg_next(struct vmw_piter *viter)
 {
-	struct scatterlist *sgl = vmw_be->vsgt.sgt->sgl;
+	return ++(viter->i) < viter->num_pages;
+}
 
-	if (unlikely(sgl == NULL))
-		return;
+static bool __vmw_piter_sg_next(struct vmw_piter *viter)
+{
+	return __sg_page_iter_next(&viter->iter);
+}
 
-	do {
-		sgl->dma_address = sg_phys(sgl);
-		if (sg_is_last(sgl))
-			break;
-		if (sg_is_chain(sgl))
-			sgl = sg_chain_ptr(sgl);
-		else
-			sgl++;
-	} while (true);
+
+/**
+ * Helper functions to return a pointer to the current page.
+ *
+ * @viter: Pointer to the iterator
+ *
+ * These functions return a pointer to the page currently
+ * pointed to by @viter. Functions are selected depending on the
+ * current mapping mode.
+ */
+static struct page *__vmw_piter_non_sg_page(struct vmw_piter *viter)
+{
+	return viter->pages[viter->i];
+}
+
+static struct page *__vmw_piter_sg_page(struct vmw_piter *viter)
+{
+	return sg_page_iter_page(&viter->iter);
+}
+
+
+/**
+ * Helper functions to return the DMA address of the current page.
+ *
+ * @viter: Pointer to the iterator
+ *
+ * These functions return the DMA address of the page currently
+ * pointed to by @viter. Functions are selected depending on the
+ * current mapping mode.
+ */
+static dma_addr_t __vmw_piter_phys_addr(struct vmw_piter *viter)
+{
+	return page_to_phys(viter->pages[viter->i]);
+}
+
+static dma_addr_t __vmw_piter_dma_addr(struct vmw_piter *viter)
+{
+	return viter->addrs[viter->i];
+}
+
+static dma_addr_t __vmw_piter_sg_addr(struct vmw_piter *viter)
+{
+	return sg_page_iter_dma_address(&viter->iter);
+}
+
+
+/**
+ * vmw_piter_start - Initialize a struct vmw_piter.
+ *
+ * @viter: Pointer to the iterator to initialize
+ * @vsgt: Pointer to a struct vmw_sg_table to initialize from
+ *
+ * Note that we're following the convention of __sg_page_iter_start, so that
+ * the iterator doesn't point to a valid page after initialization; it has
+ * to be advanced one step first.
+ */
+void vmw_piter_start(struct vmw_piter *viter, const struct vmw_sg_table *vsgt,
+		     unsigned long p_offset)
+{
+	viter->i = p_offset - 1;
+	viter->num_pages = vsgt->num_pages;
+	switch (vsgt->mode) {
+	case vmw_dma_phys:
+		viter->next = &__vmw_piter_non_sg_next;
+		viter->dma_address = &__vmw_piter_phys_addr;
+		viter->page = &__vmw_piter_non_sg_page;
+		viter->pages = vsgt->pages;
+		break;
+	case vmw_dma_alloc_coherent:
+		viter->next = &__vmw_piter_non_sg_next;
+		viter->dma_address = &__vmw_piter_dma_addr;
+		viter->page = &__vmw_piter_non_sg_page;
+		viter->addrs = vsgt->addrs;
+		break;
+	case vmw_dma_map_populate:
+	case vmw_dma_map_bind:
+		viter->next = &__vmw_piter_sg_next;
+		viter->dma_address = &__vmw_piter_sg_addr;
+		viter->page = &__vmw_piter_sg_page;
+		__sg_page_iter_start(&viter->iter, vsgt->sgt->sgl,
+				     vsgt->sgt->orig_nents, p_offset);
+		break;
+	default:
+		BUG();
+	}
 }
 
 /**
@@ -191,7 +271,7 @@ static void vmw_ttm_unmap_from_dma(struct vmw_ttm_backend *vmw_be)
 	struct device *dev = vmw_be->dev_priv->dev->dev;
 
 	dma_unmap_sg(dev, vmw_be->sgt.sgl, vmw_be->sgt.nents,
-		DMA_BIDIRECTIONAL);
+		     DMA_BIDIRECTIONAL);
 	vmw_be->sgt.nents = vmw_be->sgt.orig_nents;
 }
 
@@ -237,67 +317,72 @@ static int vmw_ttm_map_dma(struct vmw_ttm_backend *vmw_be)
 {
 	struct vmw_private *dev_priv = vmw_be->dev_priv;
 	struct ttm_mem_global *glob = vmw_mem_glob(dev_priv);
-	struct sg_page_iter iter;
+	struct vmw_sg_table *vsgt = &vmw_be->vsgt;
+	struct vmw_piter iter;
 	dma_addr_t old;
 	int ret = 0;
 	static size_t sgl_size;
 	static size_t sgt_size;
 
-	if (vmw_be->vsgt.sgt)
+	if (vmw_be->mapped)
 		return 0;
 
-	if (unlikely(!sgl_size)) {
-		sgl_size = ttm_round_pot(sizeof(struct scatterlist));
-		sgt_size = ttm_round_pot(sizeof(struct sg_table));
-	}
-
-	vmw_be->sg_alloc_size = sgt_size + sgl_size * vmw_be->num_pages;
-	ret = ttm_mem_global_alloc(glob, vmw_be->sg_alloc_size, false, true);
-	if (unlikely(ret != 0))
-		return ret;
-
-	ret = sg_alloc_table_from_pages(&vmw_be->sgt, vmw_be->pages,
-					vmw_be->num_pages, 0,
-					(unsigned long)
-					vmw_be->num_pages << PAGE_SHIFT,
-					GFP_KERNEL);
-	if (unlikely(ret != 0))
-		goto out_sg_alloc_fail;
-
-	if (vmw_be->num_pages > vmw_be->sgt.nents) {
-		uint64_t over_alloc =
-			sgl_size * (vmw_be->num_pages - vmw_be->sgt.nents);
-
-		ttm_mem_global_free(glob, over_alloc);
-		vmw_be->sg_alloc_size -= over_alloc;
-	}
-
-	vmw_be->vsgt.sgt = &vmw_be->sgt;
+	vsgt->mode = dev_priv->map_mode;
+	vsgt->pages = vmw_be->pages;
+	vsgt->num_pages = vmw_be->num_pages;
+	vsgt->addrs = NULL;
+	vsgt->sgt = &vmw_be->sgt;
 
 	switch (dev_priv->map_mode) {
 	case vmw_dma_map_bind:
 	case vmw_dma_map_populate:
+		if (unlikely(!sgl_size)) {
+			sgl_size = ttm_round_pot(sizeof(struct scatterlist));
+			sgt_size = ttm_round_pot(sizeof(struct sg_table));
+		}
+		vmw_be->sg_alloc_size = sgt_size + sgl_size * vsgt->num_pages;
+		ret = ttm_mem_global_alloc(glob, vmw_be->sg_alloc_size, false,
+					   true);
+		if (unlikely(ret != 0))
+			return ret;
+
+		ret = sg_alloc_table_from_pages(&vmw_be->sgt, vsgt->pages,
+						vsgt->num_pages, 0,
+						(unsigned long)
+						vsgt->num_pages << PAGE_SHIFT,
+						GFP_KERNEL);
+		if (unlikely(ret != 0))
+			goto out_sg_alloc_fail;
+
+		if (vsgt->num_pages > vmw_be->sgt.nents) {
+			uint64_t over_alloc =
+				sgl_size * (vsgt->num_pages -
+					    vmw_be->sgt.nents);
+
+			ttm_mem_global_free(glob, over_alloc);
+			vmw_be->sg_alloc_size -= over_alloc;
+		}
+
 		ret = vmw_ttm_map_for_dma(vmw_be);
-		break;
-	case vmw_dma_phys:
-		vmw_ttm_map_phys(vmw_be);
+		if (unlikely(ret != 0))
+			goto out_map_fail;
+
 		break;
 	default:
-		BUG();
+		;
 	}
-
-	if (unlikely(ret != 0))
-		goto out_map_fail;
 
 	old = ~((dma_addr_t) 0);
 	vmw_be->vsgt.num_regions = 0;
-	for_each_sg_page(vmw_be->sgt.sgl, &iter, vmw_be->sgt.orig_nents, 0) {
-		dma_addr_t cur = sg_page_iter_dma_address(&iter);
+	for (vmw_piter_start(&iter, vsgt, 0); vmw_piter_next(&iter);) {
+		dma_addr_t cur = vmw_piter_dma_addr(&iter);
+
 		if (cur != old + PAGE_SIZE)
 			vmw_be->vsgt.num_regions++;
 		old = cur;
 	}
 
+	vmw_be->mapped = true;
 	return 0;
 
 out_map_fail:
@@ -321,23 +406,22 @@ static void vmw_ttm_unmap_dma(struct vmw_ttm_backend *vmw_be)
 {
 	struct vmw_private *dev_priv = vmw_be->dev_priv;
 
-	if (!vmw_be->vsgt.sgt)
+	if (!vmw_be->mapped)
 		return;
 
 	switch (dev_priv->map_mode) {
 	case vmw_dma_map_bind:
 	case vmw_dma_map_populate:
 		vmw_ttm_unmap_from_dma(vmw_be);
-		/* Fall through */
-	case vmw_dma_phys:
 		sg_free_table(vmw_be->vsgt.sgt);
+		vmw_be->vsgt.sgt = NULL;
 		ttm_mem_global_free(vmw_mem_glob(dev_priv),
 				    vmw_be->sg_alloc_size);
-		vmw_be->vsgt.sgt = NULL;
 		break;
 	default:
 		break;
 	}
+	vmw_be->mapped = false;
 }
 
 static int vmw_ttm_populate(struct ttm_backend *backend,
