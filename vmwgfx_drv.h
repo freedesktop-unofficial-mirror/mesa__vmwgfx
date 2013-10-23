@@ -183,8 +183,9 @@ struct vmw_res_cache_entry {
 enum vmw_dma_map_mode {
 	vmw_dma_phys,           /* Use physical page addresses */
 	vmw_dma_alloc_coherent, /* Use TTM coherent pages */
-	vmw_dma_map_populate,   /* Map for DMA after populate */
-	vmw_dma_map_bind        /* Map for DMA after bind */
+	vmw_dma_map_populate,   /* Unmap from DMA just after unpopulate */
+	vmw_dma_map_bind,       /* Unmap from DMA just before unbind */
+	vmw_dma_map_max
 };
 
 /**

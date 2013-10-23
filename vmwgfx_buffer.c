@@ -346,14 +346,9 @@ static int vmw_ttm_populate(struct ttm_backend *backend,
 {
 	struct vmw_ttm_backend *vmw_be =
 	    container_of(backend, struct vmw_ttm_backend, backend);
-	struct vmw_private *dev_priv = vmw_be->dev_priv;
 
 	vmw_be->pages = pages;
 	vmw_be->num_pages = num_pages;
-
-	if (dev_priv->map_mode == vmw_dma_phys ||
-	    dev_priv->map_mode == vmw_dma_map_populate)
-		return vmw_ttm_map_dma(vmw_be);
 
 	return 0;
 }
