@@ -312,12 +312,6 @@ void ttm_tt_destroy(struct ttm_tt *ttm)
 	if (unlikely(ttm == NULL))
 		return;
 
-	be = ttm->be;
-	if (likely(be != NULL)) {
-		be->func->destroy(be);
-		ttm->be = NULL;
-	}
-
 	if (likely(ttm->pages != NULL)) {
 		if (ttm->page_flags & TTM_PAGE_FLAG_USER)
 			ttm_tt_free_user_pages(ttm);
@@ -325,6 +319,12 @@ void ttm_tt_destroy(struct ttm_tt *ttm)
 			ttm_tt_free_alloced_pages(ttm);
 
 		ttm_tt_free_page_directory(ttm);
+	}
+
+	be = ttm->be;
+	if (likely(be != NULL)) {
+		be->func->destroy(be);
+		ttm->be = NULL;
 	}
 
 	if (!(ttm->page_flags & TTM_PAGE_FLAG_PERSISTANT_SWAP) &&
