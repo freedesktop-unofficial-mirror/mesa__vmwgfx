@@ -243,6 +243,7 @@ void vmw_piter_start(struct vmw_piter *viter, const struct vmw_sg_table *vsgt,
 		viter->next = &__vmw_piter_non_sg_next;
 		viter->dma_address = &__vmw_piter_dma_addr;
 		viter->page = &__vmw_piter_non_sg_page;
+		viter->pages = vsgt->pages;
 		viter->addrs = vsgt->addrs;
 		break;
 	case vmw_dma_map_populate:
