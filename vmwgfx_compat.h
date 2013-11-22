@@ -407,4 +407,69 @@ static inline dma_addr_t sg_page_iter_dma_address(struct sg_page_iter *piter)
 	return sg_dma_address(piter->sg) + (piter->sg_pgoffset << PAGE_SHIFT);
 }
 #endif
+
+/*
+ * Minimal implementation of the dma-buf stuff
+ */
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 4, 0))
+#ifndef __DMA_BUF_H__
+#define __DMA_BUF_H_
+#define DMA_BUF_STANDALONE
+
+#include <linux/dma-direction.h>
+struct dma_buf_attachment;
+
+struct dma_buf {
+	struct file *file;
+	const struct dma_buf_ops *ops;
+	void *priv;
+};
+
+struct dma_buf_ops {
+	int (*attach)(struct dma_buf *, struct device *,
+			struct dma_buf_attachment *);
+
+	void (*detach)(struct dma_buf *, struct dma_buf_attachment *);
+
+	struct sg_table * (*map_dma_buf)(struct dma_buf_attachment *,
+						enum dma_data_direction);
+	void (*unmap_dma_buf)(struct dma_buf_attachment *,
+						struct sg_table *,
+						enum dma_data_direction);
+	/* after final dma_buf_put() */
+	void (*release)(struct dma_buf *);
+
+	int (*begin_cpu_access)(struct dma_buf *, size_t, size_t,
+				enum dma_data_direction);
+	void (*end_cpu_access)(struct dma_buf *, size_t, size_t,
+			       enum dma_data_direction);
+	void *(*kmap_atomic)(struct dma_buf *, unsigned long);
+	void (*kunmap_atomic)(struct dma_buf *, unsigned long, void *);
+	void *(*kmap)(struct dma_buf *, unsigned long);
+	void (*kunmap)(struct dma_buf *, unsigned long, void *);
+};
+
+struct dma_buf *dma_buf_export(void *priv, const struct dma_buf_ops *ops,
+			       size_t size, int flags);
+
+void dma_buf_put(struct dma_buf *dmabuf);
+
+struct dma_buf *dma_buf_get(int fd);
+
+static inline void get_dma_buf(struct dma_buf *dmabuf)
+{
+	get_file(dmabuf->file);
+}
+
+int dma_buf_fd(struct dma_buf *dmabuf, int flags);
+
+#endif /* __DMA_BUF_H__ */
+
+#else
+
+#include <linux/dma-buf.h>
+
+#endif
+
+
 #endif

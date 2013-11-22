@@ -8,6 +8,10 @@
  */
 
 #include <linux/scatterlist.h>
+#include <linux/slab.h>
+#include <linux/anon_inodes.h>
+#include <linux/file.h>
+
 #include "vmwgfx_compat.h"
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 6, 0))
 
@@ -109,5 +113,98 @@ bool __sg_page_iter_next(struct sg_page_iter *piter)
 	}
 
 	return true;
+}
+#endif
+
+#ifdef DMA_BUF_STANDALONE
+static int dma_buf_release(struct inode *inode, struct file *file);
+
+static const struct file_operations dma_buf_fops = {
+	.release	= dma_buf_release,
+};
+
+static int is_dma_buf_file(struct file *file)
+{
+	return file->f_op == &dma_buf_fops;
+}
+
+static int dma_buf_release(struct inode *inode, struct file *file)
+{
+	struct dma_buf *dmabuf;
+
+	if (!is_dma_buf_file(file))
+		return -EINVAL;
+
+	dmabuf = file->private_data;
+	dmabuf->ops->release(dmabuf);
+
+	kfree(dmabuf);
+	return 0;
+}
+
+struct dma_buf *dma_buf_export(void *priv, const struct dma_buf_ops *ops,
+			       size_t size, int flags)
+{
+	struct dma_buf *dmabuf;
+	struct file *file;
+
+	dmabuf = kzalloc(sizeof(struct dma_buf), GFP_KERNEL);
+	if (dmabuf == NULL)
+		return ERR_PTR(-ENOMEM);
+
+	dmabuf->priv = priv;
+	dmabuf->ops = ops;
+
+	file = anon_inode_getfile("dmabuf", &dma_buf_fops, dmabuf, flags);
+	if (IS_ERR(file)) {
+		kfree(dmabuf);
+		return ERR_CAST(file);
+	}
+
+	file->f_mode |= FMODE_LSEEK;
+	dmabuf->file = file;
+
+	return dmabuf;
+}
+
+void dma_buf_put(struct dma_buf *dmabuf)
+{
+	if (WARN_ON(!dmabuf || !dmabuf->file))
+		return;
+
+	fput(dmabuf->file);
+}
+
+struct dma_buf *dma_buf_get(int fd)
+{
+	struct file *file;
+
+	file = fget(fd);
+
+	if (!file)
+		return ERR_PTR(-EBADF);
+
+	if (!is_dma_buf_file(file)) {
+		fput(file);
+		return ERR_PTR(-EINVAL);
+	}
+
+	return file->private_data;
+}
+
+int dma_buf_fd(struct dma_buf *dmabuf, int flags)
+{
+	int fd;
+
+	if (!dmabuf || !dmabuf->file)
+		return -EINVAL;
+
+	fd = get_unused_fd_flags(flags);
+	if (fd < 0)
+		return fd;
+
+	fd_install(fd, dmabuf->file);
+
+	return fd;
 }
 #endif
