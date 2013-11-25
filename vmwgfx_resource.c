@@ -820,6 +820,89 @@ err_ref:
 }
 
 /**
+ * vmw_dumb_create - Create a dumb kms buffer
+ *
+ * @file_priv: Pointer to a struct drm_file identifying the caller.
+ * @dev: Pointer to the drm device.
+ * @args: Pointer to a struct drm_mode_create_dumb structure
+ *
+ * This is a driver callback for the core drm create_dumb functionality.
+ * Note that this is very similar to the vmw_dmabuf_alloc ioctl, except
+ * that the arguments have a different format.
+ */
+int vmw_dumb_create(struct drm_file *file_priv,
+		    struct drm_device *dev,
+		    struct drm_mode_create_dumb *args)
+{
+	struct vmw_private *dev_priv = vmw_priv(dev);
+	struct vmw_master *vmaster = vmw_master(file_priv->master);
+	struct vmw_dma_buffer *dma_buf;
+	int ret;
+
+	args->pitch = args->width * ((args->bpp + 7) / 8);
+	args->size = args->pitch * args->height;
+
+	ret = ttm_read_lock(&vmaster->lock, true);
+	if (unlikely(ret != 0))
+		return ret;
+
+	ret = vmw_user_dmabuf_alloc(dev_priv, vmw_fpriv(file_priv)->tfile,
+				    args->size, false, &args->handle,
+				    &dma_buf);
+	if (unlikely(ret != 0))
+		goto out_no_dmabuf;
+
+	vmw_dmabuf_unreference(&dma_buf);
+out_no_dmabuf:
+	ttm_read_unlock(&vmaster->lock);
+	return ret;
+}
+
+/**
+ * vmw_dumb_map_offset - Return the address space offset of a dumb buffer
+ *
+ * @file_priv: Pointer to a struct drm_file identifying the caller.
+ * @dev: Pointer to the drm device.
+ * @handle: Handle identifying the dumb buffer.
+ * @offset: The address space offset returned.
+ *
+ * This is a driver callback for the core drm dumb_map_offset functionality.
+ */
+int vmw_dumb_map_offset(struct drm_file *file_priv,
+			struct drm_device *dev, uint32_t handle,
+			uint64_t *offset)
+{
+	struct ttm_object_file *tfile = vmw_fpriv(file_priv)->tfile;
+	struct vmw_dma_buffer *out_buf;
+	int ret;
+
+	ret = vmw_user_dmabuf_lookup(tfile, handle, &out_buf);
+	if (ret != 0)
+		return -EINVAL;
+
+	*offset = out_buf->base.addr_space_offset;
+	vmw_dmabuf_unreference(&out_buf);
+	return 0;
+}
+
+/**
+ * vmw_dumb_destroy - Destroy a dumb boffer
+ *
+ * @file_priv: Pointer to a struct drm_file identifying the caller.
+ * @dev: Pointer to the drm device.
+ * @handle: Handle identifying the dumb buffer.
+ *
+ * This is a driver callback for the core drm dumb_destroy functionality.
+ */
+int vmw_dumb_destroy(struct drm_file *file_priv,
+		     struct drm_device *dev,
+		     uint32_t handle)
+{
+	return ttm_ref_object_base_unref(vmw_fpriv(file_priv)->tfile,
+					 handle, TTM_REF_USAGE);
+}
+
+/**
  * vmw_resource_buf_alloc - Allocate a backup buffer for a resource.
  *
  * @res:            The resource for which to allocate a backup buffer.

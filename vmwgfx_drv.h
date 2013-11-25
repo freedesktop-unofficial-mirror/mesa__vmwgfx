@@ -545,6 +545,15 @@ extern void vmw_fence_single_bo(struct ttm_buffer_object *bo,
 				struct vmw_fence_obj *fence,
 				void *sync_obj_arg);
 extern void vmw_resource_evict_all(struct vmw_private *dev_priv);
+extern int vmw_dumb_create(struct drm_file *file_priv,
+			   struct drm_device *dev,
+			   struct drm_mode_create_dumb *args);
+extern int vmw_dumb_map_offset(struct drm_file *file_priv,
+			       struct drm_device *dev, uint32_t handle,
+			       uint64_t *offset);
+extern int vmw_dumb_destroy(struct drm_file *file_priv,
+			    struct drm_device *dev,
+			    uint32_t handle);
 
 /**
  * DMA buffer helper routines - vmwgfx_dmabuf.c
