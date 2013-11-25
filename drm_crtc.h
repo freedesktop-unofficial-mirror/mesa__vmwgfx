@@ -621,6 +621,12 @@ struct drm_mode_config {
 	struct drm_property *scaling_mode_property;
 	struct drm_property *dithering_mode_property;
 	struct drm_property *dirty_info_property;
+
+	/* dumb ioctl parameters */
+	uint32_t preferred_depth, prefer_shadow;
+
+	/* whether async page flip is supported or not */
+	bool async_page_flip;
 };
 
 #define obj_to_crtc(x) container_of(x, struct drm_crtc, base)

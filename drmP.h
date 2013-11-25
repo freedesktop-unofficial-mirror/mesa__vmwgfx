@@ -345,6 +345,7 @@ typedef int drm_ioctl_compat_t(struct file *filp, unsigned int cmd,
 #define DRM_ROOT_ONLY	0x4
 #define DRM_CONTROL_ALLOW 0x8
 #define DRM_UNLOCKED	0x10
+#define DRM_RENDER_ALLOW 0x20
 
 struct drm_ioctl_desc {
 	unsigned int cmd;
@@ -1257,6 +1258,8 @@ extern int drm_getclient(struct drm_device *dev, void *data,
 			 struct drm_file *file_priv);
 extern int drm_getstats(struct drm_device *dev, void *data,
 			struct drm_file *file_priv);
+extern int drm_getcap(struct drm_device *dev, void *data,
+		      struct drm_file *file_priv);
 extern int drm_setversion(struct drm_device *dev, void *data,
 			  struct drm_file *file_priv);
 extern int drm_noop(struct drm_device *dev, void *data,

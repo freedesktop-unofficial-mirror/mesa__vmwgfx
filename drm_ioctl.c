@@ -295,6 +295,44 @@ int drm_getstats(struct drm_device *dev, void *data,
 }
 
 /**
+ * Get device/driver capabilities
+ */
+int drm_getcap(struct drm_device *dev, void *data, struct drm_file *file_priv)
+{
+	struct drm_get_cap *req = data;
+
+	req->value = 0;
+	switch (req->capability) {
+	case DRM_CAP_DUMB_BUFFER:
+		if (dev->driver->dumb_create)
+			req->value = 1;
+		break;
+	case DRM_CAP_VBLANK_HIGH_CRTC:
+		req->value = 1;
+		break;
+	case DRM_CAP_DUMB_PREFERRED_DEPTH:
+		req->value = dev->mode_config.preferred_depth;
+		break;
+	case DRM_CAP_DUMB_PREFER_SHADOW:
+		req->value = dev->mode_config.prefer_shadow;
+		break;
+	case DRM_CAP_PRIME:
+		req->value |= dev->driver->prime_fd_to_handle ? DRM_PRIME_CAP_IMPORT : 0;
+		req->value |= dev->driver->prime_handle_to_fd ? DRM_PRIME_CAP_EXPORT : 0;
+		break;
+	case DRM_CAP_TIMESTAMP_MONOTONIC:
+		req->value = 0;
+		break;
+	case DRM_CAP_ASYNC_PAGE_FLIP:
+		req->value = dev->mode_config.async_page_flip;
+		break;
+	default:
+		return -EINVAL;
+	}
+	return 0;
+}
+
+/**
  * Setversion ioctl.
  *
  * \param inode device inode.

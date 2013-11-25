@@ -596,6 +596,22 @@ struct drm_gem_open {
 	__u64 size;
 };
 
+#define DRM_CAP_DUMB_BUFFER		0x1
+#define DRM_CAP_VBLANK_HIGH_CRTC	0x2
+#define DRM_CAP_DUMB_PREFERRED_DEPTH	0x3
+#define DRM_CAP_DUMB_PREFER_SHADOW	0x4
+#define DRM_CAP_PRIME			0x5
+#define  DRM_PRIME_CAP_IMPORT		0x1
+#define  DRM_PRIME_CAP_EXPORT		0x2
+#define DRM_CAP_TIMESTAMP_MONOTONIC	0x6
+#define DRM_CAP_ASYNC_PAGE_FLIP		0x7
+
+/** DRM_IOCTL_GET_CAP ioctl argument type */
+struct drm_get_cap {
+	__u64 capability;
+	__u64 value;
+};
+
 #define DRM_CLOEXEC O_CLOEXEC
 struct drm_prime_handle {
 	__u32 handle;
@@ -627,6 +643,7 @@ struct drm_prime_handle {
 #define DRM_IOCTL_GEM_CLOSE		DRM_IOW (0x09, struct drm_gem_close)
 #define DRM_IOCTL_GEM_FLINK		DRM_IOWR(0x0a, struct drm_gem_flink)
 #define DRM_IOCTL_GEM_OPEN		DRM_IOWR(0x0b, struct drm_gem_open)
+#define DRM_IOCTL_GET_CAP		DRM_IOWR(0x0c, struct drm_get_cap)
 
 #define DRM_IOCTL_SET_UNIQUE		DRM_IOW( 0x10, struct drm_unique)
 #define DRM_IOCTL_AUTH_MAGIC		DRM_IOW( 0x11, struct drm_auth)
