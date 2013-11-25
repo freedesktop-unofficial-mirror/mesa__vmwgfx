@@ -35,7 +35,7 @@
 #define VMW_RES_EVICT_ERR_COUNT 10
 
 struct vmw_user_dma_buffer {
-	struct ttm_base_object base;
+	struct ttm_prime_object prime;
 	struct vmw_dma_buffer dma;
 };
 
@@ -426,7 +426,7 @@ static void vmw_user_dmabuf_destroy(struct ttm_buffer_object *bo)
 	struct ttm_bo_global *glob = bo->glob;
 
 	ttm_mem_global_free(glob->mem_glob, bo->acc_size);
-	ttm_base_object_kfree(vmw_user_bo, base);
+	ttm_prime_object_kfree(vmw_user_bo, prime);
 }
 
 static void vmw_user_dmabuf_release(struct ttm_base_object **p_base)
@@ -440,7 +440,8 @@ static void vmw_user_dmabuf_release(struct ttm_base_object **p_base)
 	if (unlikely(base == NULL))
 		return;
 
-	vmw_user_bo = container_of(base, struct vmw_user_dma_buffer, base);
+	vmw_user_bo = container_of(base, struct vmw_user_dma_buffer,
+				   prime.base);
 	bo = &vmw_user_bo->dma.base;
 	ttm_bo_unref(&bo);
 }
@@ -481,18 +482,19 @@ int vmw_user_dmabuf_alloc(struct vmw_private *dev_priv,
 		return ret;
 
 	tmp = ttm_bo_reference(&user_bo->dma.base);
-	ret = ttm_base_object_init(tfile,
-				   &user_bo->base,
-				   shareable,
-				   ttm_buffer_type,
-				   &vmw_user_dmabuf_release, NULL);
+	ret = ttm_prime_object_init(tfile,
+				    size,
+				    &user_bo->prime,
+				    shareable,
+				    ttm_buffer_type,
+				    &vmw_user_dmabuf_release, NULL);
 	if (unlikely(ret != 0)) {
 		ttm_bo_unref(&tmp);
 		goto out_no_base_object;
 	}
 
 	*p_dma_buf = &user_bo->dma;
-	*handle = user_bo->base.hash.key;
+	*handle = user_bo->prime.base.hash.key;
 
 out_no_base_object:
 	return ret;
@@ -514,8 +516,8 @@ int vmw_user_dmabuf_verify_access(struct ttm_buffer_object *bo,
 		return -EPERM;
 
 	vmw_user_bo = vmw_user_dma_buffer(bo);
-	return (vmw_user_bo->base.tfile == tfile ||
-	vmw_user_bo->base.shareable) ? 0 : -EPERM;
+	return (vmw_user_bo->prime.base.tfile == tfile ||
+		vmw_user_bo->prime.base.shareable) ? 0 : -EPERM;
 }
 
 int vmw_dmabuf_alloc_ioctl(struct drm_device *dev, void *data,
@@ -577,14 +579,15 @@ int vmw_user_dmabuf_lookup(struct ttm_object_file *tfile,
 		return -ESRCH;
 	}
 
-	if (unlikely(base->object_type != ttm_buffer_type)) {
+	if (unlikely(ttm_base_object_type(base) != ttm_buffer_type)) {
 		ttm_base_object_unref(&base);
 		printk(KERN_ERR "Invalid buffer object handle 0x%08lx.\n",
 		       (unsigned long)handle);
 		return -EINVAL;
 	}
 
-	vmw_user_bo = container_of(base, struct vmw_user_dma_buffer, base);
+	vmw_user_bo = container_of(base, struct vmw_user_dma_buffer,
+				   prime.base);
 	(void)ttm_bo_reference(&vmw_user_bo->dma.base);
 	ttm_base_object_unref(&base);
 	*out = &vmw_user_bo->dma;
@@ -601,7 +604,8 @@ int vmw_user_dmabuf_reference(struct ttm_object_file *tfile,
 		return -EINVAL;
 
 	user_bo = container_of(dma_buf, struct vmw_user_dma_buffer, dma);
-	return ttm_ref_object_add(tfile, &user_bo->base, TTM_REF_USAGE, NULL);
+	return ttm_ref_object_add(tfile, &user_bo->prime.base,
+				  TTM_REF_USAGE, NULL);
 }
 
 /*
