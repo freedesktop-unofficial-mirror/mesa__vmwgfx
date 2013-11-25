@@ -1424,6 +1424,9 @@ int vmw_kms_init(struct vmw_private *dev_priv)
 	/* assumed largest fb size */
 	dev->mode_config.max_width = 8192;
 	dev->mode_config.max_height = 8192;
+	dev->mode_config.preferred_depth = 32;
+	dev->mode_config.prefer_shadow = 0;
+	dev->mode_config.async_page_flip = 1;
 
 	ret = vmw_kms_init_screen_object_display(dev_priv);
 	if (ret) /* Fallback */
