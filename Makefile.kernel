@@ -12,6 +12,7 @@ vmwgfx-objs    := drm_auth.o drm_bufs.o drm_context.o drm_crtc.o \
 		drm_edid.o drm_lock.o drm_memory.o drm_proc.o drm_stub.o \
 		drm_vm.o drm_sysfs.o drm_hashtab.o drm_mm.o \
 		drm_debugfs.o drm_info.o drm_global.o drm_cache.o\
+		drm_prime.o \
 		ttm_bo.o ttm_bo_util.o ttm_bo_vm.o ttm_tt.o ttm_memory.o \
 		ttm_page_alloc.o ttm_object.o ttm_lock.o ttm_execbuf_util.o \
 		ttm_module.o ttm_bo_manager.o \
@@ -20,7 +21,8 @@ vmwgfx-objs    := drm_auth.o drm_bufs.o drm_context.o drm_crtc.o \
 		vmwgfx_irq.o vmwgfx_kms.o vmwgfx_ldu.o vmwgfx_fb.o \
 		vmwgfx_overlay.o vmwgfx_marker.o vmwgfx_defio.o \
 		vmwgfx_gmrid_manager.o vmwgfx_fence.o vmwgfx_dmabuf.o \
-		vmwgfx_scrn.o vmwgfx_surface.o vmwgfx_context.o vmwgfx_compat.o
+		vmwgfx_scrn.o vmwgfx_surface.o vmwgfx_context.o vmwgfx_compat.o\
+		vmwgfx_prime.o
 
 ifeq ($(CONFIG_COMPAT),y)
 vmwgfx-objs    += drm_ioc32.o

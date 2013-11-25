@@ -160,6 +160,7 @@ extern void drm_ut_debug_printk(unsigned int request_level,
 #define DRIVER_FB_DMA      0x400
 #define DRIVER_IRQ_VBL2    0x800
 #define DRIVER_MODESET     0x2000
+#define DRIVER_PRIME       0x4000
 
 /***********************************************************************/
 /** \name Begin the DRM... */
@@ -854,6 +855,12 @@ struct drm_driver {
 	void (*master_drop)(struct drm_device *dev, struct drm_file *file_priv,
 			    bool from_release);
 
+	/* prime: */
+	int (*prime_handle_to_fd)(struct drm_device *dev, struct drm_file *file_priv,
+				uint32_t handle, uint32_t flags, int *prime_fd);
+	int (*prime_fd_to_handle)(struct drm_device *dev, struct drm_file *file_priv,
+				int prime_fd, uint32_t *handle);
+
 	int (*proc_init)(struct drm_minor *minor);
 	void (*proc_cleanup)(struct drm_minor *minor);
 	int (*debugfs_init)(struct drm_minor *minor);
@@ -1454,6 +1461,12 @@ extern int drm_clients_info(struct seq_file *m, void* data);
 #if DRM_DEBUG_CODE
 extern int drm_vma_info(struct seq_file *m, void *data);
 #endif
+
+/* Prime code, (drm_prime.c) */
+extern int drm_prime_handle_to_fd_ioctl(struct drm_device *dev, void *data,
+					struct drm_file *file_priv);
+extern int drm_prime_fd_to_handle_ioctl(struct drm_device *dev, void *data,
+					struct drm_file *file_priv);
 
 			       /* sysfs support (drm_sysfs.c) */
 struct drm_sysfs_class;
