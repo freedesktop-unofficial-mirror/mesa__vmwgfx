@@ -1145,11 +1145,19 @@ static __inline__ int drm_core_check_feature(struct drm_device *dev,
 	return ((dev->driver->driver_features & feature) ? 1 : 0);
 }
 
-#ifdef __alpha__
-#define drm_get_pci_domain(dev) dev->hose->index
-#else
-#define drm_get_pci_domain(dev) 0
-#endif
+static inline int drm_get_pci_domain(struct drm_device *dev)
+{
+#ifndef __alpha__
+	/* For historical reasons, drm_get_pci_domain() is busticated
+	 * on most archs and has to remain so for userspace interface
+	 * < 1.4, except on alpha which was right from the beginning
+	 */
+	if (dev->if_version < 0x10004)
+		return 0;
+#endif /* __alpha__ */
+
+	return pci_domain_nr(dev->pdev->bus);
+}
 
 #if __OS_HAS_AGP
 static inline int drm_core_has_AGP(struct drm_device *dev)
