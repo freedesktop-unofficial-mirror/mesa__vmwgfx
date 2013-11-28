@@ -296,7 +296,7 @@ static void vmw_user_shader_free(struct vmw_resource *res)
 		container_of(res, struct vmw_user_shader, shader.res);
 	struct vmw_private *dev_priv = res->dev_priv;
 
-	kfree(ushader);
+	ttm_base_object_kfree(ushader, base);
 	ttm_mem_global_free(vmw_mem_glob(dev_priv),
 			    vmw_user_shader_size);
 }
