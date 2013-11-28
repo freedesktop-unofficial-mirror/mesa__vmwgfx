@@ -357,20 +357,32 @@ int vmw_user_lookup_handle(struct vmw_private *dev_priv,
  * Buffer management.
  */
 
-static size_t vmw_dmabuf_acc_size(struct ttm_bo_global *glob,
-				  unsigned long num_pages)
+/**
+ * vmw_dmabuf_acc_size - Calculate the pinned memory usage of buffers
+ *
+ * @dev_priv: Pointer to a struct vmw_private identifying the device.
+ * @size: The requested buffer size.
+ * @user: Whether this is an ordinary dma buffer or a user dma buffer.
+ */
+size_t vmw_dmabuf_acc_size(struct vmw_private *dev_priv, size_t size,
+			   bool user)
 {
-	static size_t bo_user_size = ~0;
+	static size_t struct_size, user_struct_size;
+	size_t num_pages = PAGE_ALIGN(size) >> PAGE_SHIFT;
+	size_t page_array_size = ttm_round_pot(num_pages * sizeof(void *));
 
-	size_t page_array_size =
-	    (num_pages * sizeof(void *) + PAGE_SIZE - 1) & PAGE_MASK;
-
-	if (unlikely(bo_user_size == ~0)) {
-		bo_user_size = glob->ttm_bo_extra_size +
-		    ttm_round_pot(sizeof(struct vmw_dma_buffer));
+	if (unlikely(struct_size == 0)) {
+		struct_size = ttm_round_pot(sizeof(struct vmw_dma_buffer));
+		user_struct_size =
+			ttm_round_pot(sizeof(struct vmw_user_dma_buffer));
 	}
 
-	return bo_user_size + page_array_size;
+	if (dev_priv->map_mode == vmw_dma_alloc_coherent)
+		page_array_size +=
+			ttm_round_pot(num_pages * sizeof(dma_addr_t));
+
+	return ((user) ? user_struct_size : struct_size) +
+		page_array_size + dev_priv->bdev.glob->ttm_bo_extra_size;
 }
 
 void vmw_dmabuf_bo_free(struct ttm_buffer_object *bo)
@@ -380,6 +392,15 @@ void vmw_dmabuf_bo_free(struct ttm_buffer_object *bo)
 
 	ttm_mem_global_free(glob->mem_glob, bo->acc_size);
 	kfree(vmw_bo);
+}
+
+static void vmw_user_dmabuf_destroy(struct ttm_buffer_object *bo)
+{
+	struct vmw_user_dma_buffer *vmw_user_bo = vmw_user_dma_buffer(bo);
+	struct ttm_bo_global *glob = bo->glob;
+
+	ttm_mem_global_free(glob->mem_glob, bo->acc_size);
+	ttm_prime_object_kfree(vmw_user_bo, prime);
 }
 
 int vmw_dmabuf_init(struct vmw_private *dev_priv,
@@ -392,20 +413,16 @@ int vmw_dmabuf_init(struct vmw_private *dev_priv,
 	struct ttm_mem_global *mem_glob = bdev->glob->mem_glob;
 	size_t acc_size;
 	int ret;
+	bool user = (bo_free == &vmw_user_dmabuf_destroy);
 
-	BUG_ON(!bo_free);
+	BUG_ON(!bo_free && (!user && (bo_free != vmw_dmabuf_bo_free)));
 
-	acc_size =
-	    vmw_dmabuf_acc_size(bdev->glob,
-				(size + PAGE_SIZE - 1) >> PAGE_SHIFT);
-
-	ret = ttm_mem_global_alloc(mem_glob, acc_size, false, false);
-
+	acc_size = vmw_dmabuf_acc_size(dev_priv, size, user);
 	memset(vmw_bo, 0, sizeof(*vmw_bo));
 	INIT_LIST_HEAD(&vmw_bo->res_list);
-	vmw_bo->base.acc_size = acc_size;
 	vmw_bo->base.glob = bdev->glob;
 
+	ret = ttm_mem_global_alloc(mem_glob, acc_size, false, false);
 	if (unlikely(ret != 0)) {
 		/* we must free the bo here as
 		 * ttm_buffer_object_init does so as well */
@@ -413,20 +430,13 @@ int vmw_dmabuf_init(struct vmw_private *dev_priv,
 		return ret;
 	}
 
+	vmw_bo->base.acc_size = acc_size;
 	ret = ttm_bo_init(bdev, &vmw_bo->base, size,
-			  ttm_bo_type_device, placement,
+			  (user) ? ttm_bo_type_device :
+			  ttm_bo_type_kernel, placement,
 			  0, 0, interruptible,
 			  NULL, acc_size, bo_free);
 	return ret;
-}
-
-static void vmw_user_dmabuf_destroy(struct ttm_buffer_object *bo)
-{
-	struct vmw_user_dma_buffer *vmw_user_bo = vmw_user_dma_buffer(bo);
-	struct ttm_bo_global *glob = bo->glob;
-
-	ttm_mem_global_free(glob->mem_glob, bo->acc_size);
-	ttm_prime_object_kfree(vmw_user_bo, prime);
 }
 
 static void vmw_user_dmabuf_release(struct ttm_base_object **p_base)
