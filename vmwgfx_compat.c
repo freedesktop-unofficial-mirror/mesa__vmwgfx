@@ -9,8 +9,6 @@
 
 #include <linux/scatterlist.h>
 #include <linux/slab.h>
-#include <linux/anon_inodes.h>
-#include <linux/file.h>
 
 #include "vmwgfx_compat.h"
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 6, 0))
@@ -117,6 +115,11 @@ bool __sg_page_iter_next(struct sg_page_iter *piter)
 #endif
 
 #ifdef DMA_BUF_STANDALONE
+#include <linux/file.h>
+#include <linux/anon_inodes.h>
+#include <linux/fdtable.h>
+#include <linux/sched.h>
+
 static int dma_buf_release(struct inode *inode, struct file *file);
 
 static const struct file_operations dma_buf_fops = {
@@ -192,6 +195,16 @@ struct dma_buf *dma_buf_get(int fd)
 	return file->private_data;
 }
 
+static void compat_set_close_on_exec(unsigned int fd)
+{
+	struct files_struct *files = current->files;
+	struct fdtable *fdt;
+	spin_lock(&files->file_lock);
+	fdt = files_fdtable(files);
+	FD_SET(fd, fdt->close_on_exec);
+	spin_unlock(&files->file_lock);
+}
+
 int dma_buf_fd(struct dma_buf *dmabuf, int flags)
 {
 	int fd;
@@ -199,10 +212,16 @@ int dma_buf_fd(struct dma_buf *dmabuf, int flags)
 	if (!dmabuf || !dmabuf->file)
 		return -EINVAL;
 
-	fd = get_unused_fd_flags(flags);
+	fd = get_unused_fd();
 	if (fd < 0)
 		return fd;
 
+	/*
+	 * We explicitly set close_on_exec here since the function
+	 * get_unused_fd_flags() which is used in the core dma-buf
+	 * implementation is not exported on early 3 series kernels.
+	 */
+	compat_set_close_on_exec(fd);
 	fd_install(fd, dmabuf->file);
 
 	return fd;

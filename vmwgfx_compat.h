@@ -388,6 +388,8 @@ bool __sg_page_iter_next(struct sg_page_iter *piter);
 void __sg_page_iter_start(struct sg_page_iter *piter,
 			  struct scatterlist *sglist, unsigned int nents,
 			  unsigned long pgoffset);
+#endif
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 10, 0))
 /**
  * sg_page_iter_page - get the current page held by the page iterator
  * @piter:	page iterator holding the page
@@ -416,7 +418,7 @@ static inline dma_addr_t sg_page_iter_dma_address(struct sg_page_iter *piter)
 #define __DMA_BUF_H_
 #define DMA_BUF_STANDALONE
 
-#include <linux/dma-direction.h>
+#include <linux/dma-mapping.h>
 struct dma_buf_attachment;
 
 struct dma_buf {
