@@ -63,6 +63,7 @@
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <asm/atomic.h>
+#include "vmwgfx_compat.h"
 
 struct ttm_object_file {
 	struct ttm_object_device *tdev;
