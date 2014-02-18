@@ -26,7 +26,7 @@
  *
  */
 
-#include <drm/drmP.h>
+#include "drmP.h"
 
 int drm_prime_handle_to_fd_ioctl(struct drm_device *dev, void *data,
 				 struct drm_file *file_priv)
