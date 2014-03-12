@@ -394,7 +394,6 @@ static inline void set_page_locked(struct page *page)
 		(__x < 0) ? -__x : __x;		\
 	})
 #endif
-#endif
 
 /**
  * VM_RESERVED disappeared in 3.7, and is replaced in upstream
@@ -403,4 +402,14 @@ static inline void set_page_locked(struct page *page)
  */
 #ifndef VM_DONTDUMP
 #define VM_DONTDUMP VM_RESERVED
+#endif
+
+/*
+ * kuid stuff, introduced in 3.5.
+ */
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 5, 0))
+#define kuid_t uid_t
+#define from_kuid_munged(_a, _uid) (_uid)
+#endif
+
 #endif
