@@ -72,6 +72,7 @@ void drm_ctxbitmap_free(struct drm_device * dev, int ctx_handle)
  * Allocate a new idr from drm_device::ctx_idr while holding the
  * drm_device::struct_mutex lock.
  */
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3,9,0))
 static int drm_ctxbitmap_next(struct drm_device * dev)
 {
 	int new_id;
@@ -92,6 +93,18 @@ again:
 	mutex_unlock(&dev->struct_mutex);
 	return new_id;
 }
+#else
+static int drm_ctxbitmap_next(struct drm_device *dev)
+{
+	int ret;
+
+	mutex_lock(&dev->struct_mutex);
+	ret = idr_alloc(&dev->ctx_idr, NULL, DRM_RESERVED_CONTEXTS, 0,
+			GFP_KERNEL);
+	mutex_unlock(&dev->struct_mutex);
+	return ret;
+}
+#endif
 
 /**
  * Context bitmap initialization.
@@ -117,7 +130,10 @@ int drm_ctxbitmap_init(struct drm_device * dev)
 void drm_ctxbitmap_cleanup(struct drm_device * dev)
 {
 	mutex_lock(&dev->struct_mutex);
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3,9,0))
 	idr_remove_all(&dev->ctx_idr);
+#endif
+	idr_destroy(&dev->ctx_idr);
 	mutex_unlock(&dev->struct_mutex);
 }
 

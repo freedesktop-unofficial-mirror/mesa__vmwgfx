@@ -221,6 +221,7 @@ char *drm_get_connector_status_name(enum drm_connector_status status)
  * New unique (relative to other objects in @dev) integer identifier for the
  * object.
  */
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3,9,0))
 static int drm_mode_object_get(struct drm_device *dev,
 			       struct drm_mode_object *obj, uint32_t obj_type)
 {
@@ -243,6 +244,27 @@ again:
 	obj->type = obj_type;
 	return 0;
 }
+#else
+int drm_mode_object_get(struct drm_device *dev,
+			struct drm_mode_object *obj, uint32_t obj_type)
+{
+	int ret;
+
+	mutex_lock(&dev->mode_config.idr_mutex);
+	ret = idr_alloc(&dev->mode_config.crtc_idr, obj, 1, 0, GFP_KERNEL);
+	if (ret >= 0) {
+		/*
+		 * Set up the object linking under the protection of the idr
+		 * lock so that other users can't see inconsistent state.
+		 */
+		obj->id = ret;
+		obj->type = obj_type;
+	}
+	mutex_unlock(&dev->mode_config.idr_mutex);
+
+	return ret < 0 ? ret : 0;
+}
+#endif
 
 /**
  * drm_mode_object_put - free an identifer

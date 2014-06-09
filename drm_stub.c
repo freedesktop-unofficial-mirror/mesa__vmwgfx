@@ -77,6 +77,8 @@ void drm_ut_debug_printk(unsigned int request_level,
 	}
 }
 EXPORT_SYMBOL(drm_ut_debug_printk);
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3,9,0))
 static int drm_minor_get_id(struct drm_device *dev, int type)
 {
 	int new_id;
@@ -112,6 +114,33 @@ again:
 	}
 	return new_id;
 }
+#else
+static int drm_minor_get_id(struct drm_device *dev, int type)
+{
+	int ret;
+	int base = 0, limit = 63;
+
+	if (type == DRM_MINOR_CONTROL) {
+		base += 64;
+		limit = base + 127;
+	} else if (type == DRM_MINOR_RENDER) {
+		base += 128;
+		limit = base + 255;
+	}
+
+	mutex_lock(&dev->struct_mutex);
+	ret = idr_alloc(&drm_minors_idr, NULL, base, 0, GFP_KERNEL);
+	mutex_unlock(&dev->struct_mutex);
+	if (ret < 0)
+		return ret;
+
+	if (ret >= limit) {
+		idr_remove(&drm_minors_idr, ret);
+		return -EINVAL;
+	}
+	return ret;
+}
+#endif
 
 struct drm_master *drm_master_create(struct drm_minor *minor)
 {
