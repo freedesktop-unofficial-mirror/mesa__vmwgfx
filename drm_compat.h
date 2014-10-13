@@ -412,4 +412,10 @@ static inline void set_page_locked(struct page *page)
 #define from_kuid_munged(_a, _uid) (_uid)
 #endif
 
+/* hlist_add_after_rcu disappeared in linux 3.17 */
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 17, 0))
+#define hlist_add_after_rcu(__parent, __item) \
+	hlist_add_behind_rcu(__item, __parent)
+#endif
+
 #endif

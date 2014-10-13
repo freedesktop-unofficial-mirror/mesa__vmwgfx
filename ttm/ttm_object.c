@@ -634,9 +634,13 @@ int ttm_prime_handle_to_fd(struct ttm_object_file *tfile,
 			mutex_unlock(&prime->mutex);
 			goto out_unref;
 		}
-
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 17, 0))
+		dma_buf = dma_buf_export(prime, &tdev->ops,
+					 prime->size, flags, NULL);
+#else
 		dma_buf = dma_buf_export(prime, &tdev->ops,
 					 prime->size, flags);
+#endif
 		if (IS_ERR(dma_buf)) {
 			ret = PTR_ERR(dma_buf);
 			ttm_mem_global_free(tdev->mem_glob,
