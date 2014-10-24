@@ -822,8 +822,8 @@ extern void vmw_execbuf_copy_fence_user(struct vmw_private *dev_priv,
 
 extern irqreturn_t vmw_irq_handler(DRM_IRQ_ARGS);
 extern int vmw_wait_seqno(struct vmw_private *dev_priv, bool lazy,
-			     uint32_t seqno, bool interruptible,
-			     unsigned long timeout);
+			  uint32_t seqno, bool interruptible,
+			  unsigned long timeout);
 extern void vmw_irq_preinstall(struct drm_device *dev);
 extern int vmw_irq_postinstall(struct drm_device *dev);
 extern void vmw_irq_uninstall(struct drm_device *dev);
@@ -850,9 +850,9 @@ extern void vmw_goal_waiter_remove(struct vmw_private *dev_priv);
 extern void vmw_marker_queue_init(struct vmw_marker_queue *queue);
 extern void vmw_marker_queue_takedown(struct vmw_marker_queue *queue);
 extern int vmw_marker_push(struct vmw_marker_queue *queue,
-			  uint32_t seqno);
+			   uint32_t seqno);
 extern int vmw_marker_pull(struct vmw_marker_queue *queue,
-			  uint32_t signaled_seqno);
+			   uint32_t signaled_seqno);
 extern int vmw_wait_lag(struct vmw_private *dev_priv,
 			struct vmw_marker_queue *queue, uint32_t us);
 

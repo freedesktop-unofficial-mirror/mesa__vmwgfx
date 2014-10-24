@@ -1525,7 +1525,7 @@ int vmw_kms_save_vga(struct vmw_private *vmw_priv)
 		  vmw_read(vmw_priv, SVGA_REG_PITCHLOCK);
 	else if (vmw_fifo_have_pitchlock(vmw_priv))
 		vmw_priv->vga_pitchlock = ioread32(vmw_priv->mmio_virt +
-						       SVGA_FIFO_PITCHLOCK);
+						   SVGA_FIFO_PITCHLOCK);
 
 	if (!(vmw_priv->capabilities & SVGA_CAP_DISPLAY_TOPOLOGY))
 		return 0;

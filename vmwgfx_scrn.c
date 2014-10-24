@@ -71,7 +71,7 @@ static void vmw_sou_crtc_destroy(struct drm_crtc *crtc)
 }
 
 static void vmw_sou_del_active(struct vmw_private *vmw_priv,
-			      struct vmw_screen_object_unit *sou)
+			       struct vmw_screen_object_unit *sou)
 {
 	struct vmw_screen_object_display *ld = vmw_priv->sou_priv;
 
@@ -83,8 +83,8 @@ static void vmw_sou_del_active(struct vmw_private *vmw_priv,
 }
 
 static void vmw_sou_add_active(struct vmw_private *vmw_priv,
-			      struct vmw_screen_object_unit *sou,
-			      struct vmw_framebuffer *vfb)
+			       struct vmw_screen_object_unit *sou,
+			       struct vmw_framebuffer *vfb)
 {
 	struct vmw_screen_object_display *ld = vmw_priv->sou_priv;
 

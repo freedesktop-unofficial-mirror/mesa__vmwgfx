@@ -126,8 +126,8 @@ int vmw_du_page_flip(struct drm_crtc *crtc,
 void vmw_du_crtc_save(struct drm_crtc *crtc);
 void vmw_du_crtc_restore(struct drm_crtc *crtc);
 void vmw_du_crtc_gamma_set(struct drm_crtc *crtc,
-			    u16 *r, u16 *g, u16 *b,
-			    uint32_t start, uint32_t size);
+			   u16 *r, u16 *g, u16 *b,
+			   uint32_t start, uint32_t size);
 int vmw_du_crtc_cursor_set(struct drm_crtc *crtc, struct drm_file *file_priv,
 			   uint32_t handle, uint32_t width, uint32_t height);
 int vmw_du_crtc_cursor_move(struct drm_crtc *crtc, int x, int y);
