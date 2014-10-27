@@ -190,4 +190,16 @@ int vmw_kms_sou_do_dmabuf_dirty(struct drm_file *file_priv,
 				struct drm_clip_rect *clips,
 				unsigned num_clips, int increment,
 				struct vmw_fence_obj **out_fence);
+
+
+/*
+ * Screen Target Display Unit functions - vmwgfx_stdu.c
+ */
+int vmw_kms_stdu_init_display(struct vmw_private *dev_priv);
+int vmw_kms_stdu_close_display(struct vmw_private *dev_priv);
+int vmw_kms_stdu_do_surface_dirty(struct vmw_private *dev_priv,
+				  struct vmw_framebuffer *framebuffer,
+				  struct drm_clip_rect *clips,
+				  unsigned num_clips, int increment);
+
 #endif

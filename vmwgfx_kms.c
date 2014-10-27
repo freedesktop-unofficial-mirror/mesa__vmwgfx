@@ -762,12 +762,16 @@ int vmw_framebuffer_dmabuf_dirty(struct drm_framebuffer *framebuffer,
 		ret = vmw_kms_ldu_do_dmabuf_dirty(dev_priv, &vfbd->base,
 						  flags, color,
 						  clips, num_clips, increment);
-	} else {
+	} else if (dev_priv->active_display_unit == vmw_du_screen_object) {
 		ret = vmw_kms_sou_do_dmabuf_dirty(file_priv, dev_priv,
 						  &vfbd->base,
 						  flags, color,
 						  clips, num_clips, increment,
 						  NULL);
+	} else {
+		ret = vmw_kms_stdu_do_surface_dirty(dev_priv, &vfbd->base,
+						    clips, num_clips,
+						    increment);
 	}
 
 	ttm_read_unlock(&vmaster->lock);
@@ -1245,9 +1249,12 @@ int vmw_kms_init(struct vmw_private *dev_priv)
 	dev->mode_config.prefer_shadow = 0;
 	dev->mode_config.async_page_flip = 1;
 
-	ret = vmw_kms_sou_init_display(dev_priv);
-	if (ret) /* Fallback */
-		ret = vmw_kms_ldu_init_display(dev_priv);
+	ret = vmw_kms_stdu_init_display(dev_priv);
+	if (ret) {
+		ret = vmw_kms_sou_init_display(dev_priv);
+		if (ret) /* Fallback */
+			ret = vmw_kms_ldu_init_display(dev_priv);
+	}
 
 	return ret;
 }
@@ -1264,6 +1271,8 @@ int vmw_kms_close(struct vmw_private *dev_priv)
 	drm_mode_config_cleanup(dev_priv->dev);
 	if (dev_priv->active_display_unit == vmw_du_screen_object)
 		ret = vmw_kms_sou_close_display(dev_priv);
+	else if (dev_priv->active_display_unit == vmw_du_screen_target)
+		ret = vmw_kms_stdu_close_display(dev_priv);
 	else
 		ret = vmw_kms_ldu_close_display(dev_priv);
 

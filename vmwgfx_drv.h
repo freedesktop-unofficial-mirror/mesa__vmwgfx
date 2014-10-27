@@ -437,6 +437,7 @@ struct vmw_private {
 	enum vmw_display_unit_type active_display_unit;
 	struct vmw_legacy_display *ldu_priv;
 	struct vmw_screen_object_display *sou_priv;
+	struct vmw_screen_target_display *stdu_priv;
 	struct vmw_overlay *overlay_priv;
 
 	/*
