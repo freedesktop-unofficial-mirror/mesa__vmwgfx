@@ -56,7 +56,7 @@ struct vmw_legacy_display_unit {
 static void vmw_ldu_destroy(struct vmw_legacy_display_unit *ldu)
 {
 	list_del_init(&ldu->active);
-	vmw_display_unit_cleanup(&ldu->base);
+	vmw_du_cleanup(&ldu->base);
 	kfree(ldu);
 }
 
@@ -383,7 +383,7 @@ static int vmw_ldu_init(struct vmw_private *dev_priv, unsigned unit)
 	return 0;
 }
 
-int vmw_kms_init_legacy_display_system(struct vmw_private *dev_priv)
+int vmw_kms_ldu_init_display(struct vmw_private *dev_priv)
 {
 	struct drm_device *dev = dev_priv->dev;
 	int i, ret;
@@ -430,7 +430,7 @@ err_free:
 	return ret;
 }
 
-int vmw_kms_close_legacy_display_system(struct vmw_private *dev_priv)
+int vmw_kms_ldu_close_display(struct vmw_private *dev_priv)
 {
 	struct drm_device *dev = dev_priv->dev;
 

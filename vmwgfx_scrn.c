@@ -56,7 +56,7 @@ struct vmw_screen_object_unit {
 
 static void vmw_sou_destroy(struct vmw_screen_object_unit *sou)
 {
-	vmw_display_unit_cleanup(&sou->base);
+	vmw_du_cleanup(&sou->base);
 	kfree(sou);
 }
 
@@ -409,6 +409,22 @@ static bool vmw_sou_screen_object_flippable(struct vmw_private *dev_priv,
 }
 
 
+/**
+ * Update the implicit fb to the current fb of this crtc.
+ * Must be called with the mode_config mutex held.
+ */
+static void vmw_sou_update_implicit_fb(struct vmw_private *dev_priv,
+				    struct drm_crtc *crtc)
+{
+	struct vmw_screen_object_unit *sou = vmw_crtc_to_sou(crtc);
+
+	BUG_ON(!sou->base.is_implicit);
+
+	dev_priv->sou_priv->implicit_fb =
+		vmw_framebuffer_to_vfb(sou->base.crtc.fb);
+}
+
+
 static int vmw_sou_crtc_page_flip(struct drm_crtc *crtc,
 				  struct drm_framebuffer *fb,
 				  struct drm_pending_vblank_event *event)
@@ -463,7 +479,7 @@ static int vmw_sou_crtc_page_flip(struct drm_crtc *crtc,
 	vmw_fence_obj_unreference(&fence);
 
 	if (vmw_crtc_to_du(crtc)->is_implicit)
-		vmw_kms_screen_object_update_implicit_fb(dev_priv, crtc);
+		vmw_sou_update_implicit_fb(dev_priv, crtc);
 
 	return ret;
 
@@ -506,7 +522,7 @@ static void vmw_sou_connector_destroy(struct drm_connector *connector)
 	vmw_sou_destroy(vmw_connector_to_sou(connector));
 }
 
-static struct drm_connector_funcs vmw_legacy_connector_funcs = {
+static struct drm_connector_funcs vmw_sou_connector_funcs = {
 	.dpms = vmw_du_connector_dpms,
 	.save = vmw_du_connector_save,
 	.restore = vmw_du_connector_restore,
@@ -541,7 +557,7 @@ static int vmw_sou_init(struct vmw_private *dev_priv, unsigned unit)
 	sou->base.pref_mode = NULL;
 	sou->base.is_implicit = true;
 
-	drm_connector_init(dev, connector, &vmw_legacy_connector_funcs,
+	drm_connector_init(dev, connector, &vmw_sou_connector_funcs,
 			   DRM_MODE_CONNECTOR_VIRTUAL);
 	connector->status = vmw_du_connector_detect(connector, false);
 
@@ -562,7 +578,7 @@ static int vmw_sou_init(struct vmw_private *dev_priv, unsigned unit)
 	return 0;
 }
 
-int vmw_kms_init_screen_object_display(struct vmw_private *dev_priv)
+int vmw_kms_sou_init_display(struct vmw_private *dev_priv)
 {
 	struct drm_device *dev = dev_priv->dev;
 	int i, ret;
@@ -610,7 +626,7 @@ err_no_mem:
 	return ret;
 }
 
-int vmw_kms_close_screen_object_display(struct vmw_private *dev_priv)
+int vmw_kms_sou_close_display(struct vmw_private *dev_priv)
 {
 	struct drm_device *dev = dev_priv->dev;
 
@@ -622,22 +638,6 @@ int vmw_kms_close_screen_object_display(struct vmw_private *dev_priv)
 	kfree(dev_priv->sou_priv);
 
 	return 0;
-}
-
-
-/**
- * Update the implicit fb to the current fb of this crtc.
- * Must be called with the mode_config mutex held.
- */
-void vmw_kms_screen_object_update_implicit_fb(struct vmw_private *dev_priv,
-					      struct drm_crtc *crtc)
-{
-	struct vmw_screen_object_unit *sou = vmw_crtc_to_sou(crtc);
-
-	BUG_ON(!sou->base.is_implicit);
-
-	dev_priv->sou_priv->implicit_fb =
-		vmw_framebuffer_to_vfb(sou->base.crtc.fb);
 }
 
 

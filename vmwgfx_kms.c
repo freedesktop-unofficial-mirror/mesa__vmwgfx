@@ -66,7 +66,7 @@ void vmw_clip_cliprects(struct drm_clip_rect *rects,
 	*out_num = k;
 }
 
-void vmw_display_unit_cleanup(struct vmw_display_unit *du)
+void vmw_du_cleanup(struct vmw_display_unit *du)
 {
 	if (du->cursor_surface)
 		vmw_surface_unreference(&du->cursor_surface);
@@ -1245,9 +1245,9 @@ int vmw_kms_init(struct vmw_private *dev_priv)
 	dev->mode_config.prefer_shadow = 0;
 	dev->mode_config.async_page_flip = 1;
 
-	ret = vmw_kms_init_screen_object_display(dev_priv);
+	ret = vmw_kms_sou_init_display(dev_priv);
 	if (ret) /* Fallback */
-		(void)vmw_kms_init_legacy_display_system(dev_priv);
+		(void)vmw_kms_ldu_init_display(dev_priv);
 
 	return 0;
 }
@@ -1261,9 +1261,9 @@ int vmw_kms_close(struct vmw_private *dev_priv)
 	 */
 	drm_mode_config_cleanup(dev_priv->dev);
 	if (dev_priv->sou_priv)
-		vmw_kms_close_screen_object_display(dev_priv);
+		vmw_kms_sou_close_display(dev_priv);
 	else
-		vmw_kms_close_legacy_display_system(dev_priv);
+		vmw_kms_ldu_close_display(dev_priv);
 	return 0;
 }
 

@@ -137,7 +137,7 @@ struct vmw_display_unit {
 /*
  * Shared display unit functions - vmwgfx_kms.c
  */
-void vmw_display_unit_cleanup(struct vmw_display_unit *du);
+void vmw_du_cleanup(struct vmw_display_unit *du);
 void vmw_du_crtc_save(struct drm_crtc *crtc);
 void vmw_du_crtc_restore(struct drm_crtc *crtc);
 void vmw_du_crtc_gamma_set(struct drm_crtc *crtc,
@@ -161,8 +161,8 @@ int vmw_du_connector_set_property(struct drm_connector *connector,
 /*
  * Legacy display unit functions - vmwgfx_ldu.c
  */
-int vmw_kms_init_legacy_display_system(struct vmw_private *dev_priv);
-int vmw_kms_close_legacy_display_system(struct vmw_private *dev_priv);
+int vmw_kms_ldu_init_display(struct vmw_private *dev_priv);
+int vmw_kms_ldu_close_display(struct vmw_private *dev_priv);
 int vmw_kms_ldu_do_dmabuf_dirty(struct vmw_private *dev_priv,
 				struct vmw_framebuffer *framebuffer,
 				unsigned flags, unsigned color,
@@ -172,12 +172,10 @@ int vmw_kms_ldu_do_dmabuf_dirty(struct vmw_private *dev_priv,
 /*
  * Screen Objects display functions - vmwgfx_scrn.c
  */
-int vmw_kms_init_screen_object_display(struct vmw_private *dev_priv);
-int vmw_kms_close_screen_object_display(struct vmw_private *dev_priv);
+int vmw_kms_sou_init_display(struct vmw_private *dev_priv);
+int vmw_kms_sou_close_display(struct vmw_private *dev_priv);
 int vmw_kms_sou_update_layout(struct vmw_private *dev_priv, unsigned num,
 			      struct drm_vmw_rect *rects);
-void vmw_kms_screen_object_update_implicit_fb(struct vmw_private *dev_priv,
-					      struct drm_crtc *crtc);
 int vmw_kms_sou_do_surface_dirty(struct vmw_private *dev_priv,
 				 struct drm_file *file_priv,
 				 struct vmw_framebuffer *framebuffer,
