@@ -329,6 +329,18 @@ struct vmw_ctx_binding_state {
 	struct vmw_ctx_binding shaders[SVGA3D_SHADERTYPE_MAX];
 };
 
+
+/*
+ * enum vmw_display_unit_type - Describes the display unit
+ */
+enum vmw_display_unit_type {
+	vmw_du_invalid = 0,
+	vmw_du_legacy,
+	vmw_du_screen_object,
+	vmw_du_screen_target
+};
+
+
 struct vmw_sw_context{
 	struct drm_open_hash res_ht;
 	bool res_ht_initialized;
@@ -421,6 +433,7 @@ struct vmw_private {
 	 */
 
 	void *fb_info;
+	enum vmw_display_unit_type active_display_unit;
 	struct vmw_legacy_display *ldu_priv;
 	struct vmw_screen_object_display *sou_priv;
 	struct vmw_overlay *overlay_priv;

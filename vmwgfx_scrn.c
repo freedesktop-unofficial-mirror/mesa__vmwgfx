@@ -613,7 +613,9 @@ int vmw_kms_sou_init_display(struct vmw_private *dev_priv)
 	for (i = 0; i < VMWGFX_NUM_DISPLAY_UNITS; ++i)
 		vmw_sou_init(dev_priv, i);
 
-	DRM_INFO("Screen objects system initialized\n");
+	dev_priv->active_display_unit = vmw_du_screen_object;
+
+	DRM_INFO("Screen Objects Display Unit initialized\n");
 
 	return 0;
 

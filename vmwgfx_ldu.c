@@ -420,6 +420,10 @@ int vmw_kms_ldu_init_display(struct vmw_private *dev_priv)
 	else
 		vmw_ldu_init(dev_priv, 0);
 
+	dev_priv->active_display_unit = vmw_du_legacy;
+
+	DRM_INFO("Legacy Display Unit initialized\n");
+
 	return 0;
 
 err_vblank_cleanup:

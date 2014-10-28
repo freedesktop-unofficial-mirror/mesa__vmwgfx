@@ -569,8 +569,8 @@ int vmw_framebuffer_surface_dirty(struct drm_framebuffer *framebuffer,
 	if (unlikely(vfbs->master != file_priv->master))
 		return -EINVAL;
 
-	/* Require ScreenObject support for 3D */
-	if (!dev_priv->sou_priv)
+	/* Legacy Display Unit does not support 3D */
+	if (dev_priv->active_display_unit == vmw_du_legacy)
 		return -EINVAL;
 
 	ret = ttm_read_lock(&vmaster->lock, true);
@@ -616,8 +616,8 @@ static int vmw_kms_new_framebuffer_surface(struct vmw_private *dev_priv,
 	struct vmw_master *vmaster = vmw_master(file_priv->master);
 	int ret;
 
-	/* 3D is only supported on HWv8 hosts which supports screen objects */
-	if (!dev_priv->sou_priv)
+	/* 3D is only supported on HWv8 and newer hosts */
+	if (dev_priv->active_display_unit == vmw_du_legacy)
 		return -ENOSYS;
 
 	/*
@@ -790,8 +790,8 @@ static int vmw_framebuffer_dmabuf_pin(struct vmw_framebuffer *vfb)
 		vmw_framebuffer_to_vfbd(&vfb->base);
 	int ret;
 
-	/* This code should not be used with screen objects */
-	BUG_ON(dev_priv->sou_priv);
+	/* This code should only be used with Legacy Display Unit */
+	BUG_ON(dev_priv->active_display_unit != vmw_du_legacy);
 
 	vmw_overlay_pause_all(dev_priv);
 
@@ -838,7 +838,7 @@ static int vmw_kms_new_framebuffer_dmabuf(struct vmw_private *dev_priv,
 	}
 
 	/* Limited framebuffer color depth support for screen objects */
-	if (dev_priv->sou_priv) {
+	if (dev_priv->active_display_unit == vmw_du_screen_object) {
 		switch (mode_cmd->depth) {
 		case 32:
 		case 24:
@@ -885,7 +885,7 @@ static int vmw_kms_new_framebuffer_dmabuf(struct vmw_private *dev_priv,
 	vfbd->base.base.depth = mode_cmd->depth;
 	vfbd->base.base.width = mode_cmd->width;
 	vfbd->base.base.height = mode_cmd->height;
-	if (!dev_priv->sou_priv) {
+	if (dev_priv->active_display_unit == vmw_du_legacy) {
 		vfbd->base.pin = vmw_framebuffer_dmabuf_pin;
 		vfbd->base.unpin = vmw_framebuffer_dmabuf_unpin;
 	}
@@ -1247,24 +1247,27 @@ int vmw_kms_init(struct vmw_private *dev_priv)
 
 	ret = vmw_kms_sou_init_display(dev_priv);
 	if (ret) /* Fallback */
-		(void)vmw_kms_ldu_init_display(dev_priv);
+		ret = vmw_kms_ldu_init_display(dev_priv);
 
-	return 0;
+	return ret;
 }
 
 int vmw_kms_close(struct vmw_private *dev_priv)
 {
+	int ret;
+
 	/*
 	 * Docs says we should take the lock before calling this function
 	 * but since it destroys encoders and our destructor calls
 	 * drm_encoder_cleanup which takes the lock we deadlock.
 	 */
 	drm_mode_config_cleanup(dev_priv->dev);
-	if (dev_priv->sou_priv)
-		vmw_kms_sou_close_display(dev_priv);
+	if (dev_priv->active_display_unit == vmw_du_screen_object)
+		ret = vmw_kms_sou_close_display(dev_priv);
 	else
-		vmw_kms_ldu_close_display(dev_priv);
-	return 0;
+		ret = vmw_kms_ldu_close_display(dev_priv);
+
+	return ret;
 }
 
 int vmw_kms_cursor_bypass_ioctl(struct drm_device *dev, void *data,
@@ -1661,7 +1664,7 @@ int vmw_du_connector_fill_modes(struct drm_connector *connector,
 	 * If using screen objects, then assume 32-bpp because that's what the
 	 * SVGA device is assuming
 	 */
-	if (dev_priv->sou_priv)
+	if (dev_priv->active_display_unit == vmw_du_screen_object)
 		assumed_bpp = 4;
 
 	/* Add preferred mode */
