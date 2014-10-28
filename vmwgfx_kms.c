@@ -32,9 +32,6 @@
 #define VMWGFX_PRESENT_RATE ((HZ / 60 > 0) ? HZ / 60 : 1)
 
 
-struct vmw_clip_rect {
-	int x1, x2, y1, y2;
-};
 
 /**
  * Clip @num_rects number of @rects against @clip storing the
@@ -331,15 +328,6 @@ void vmw_kms_cursor_snoop(struct vmw_surface *srf,
 	}
 
 	srf->snooper.age++;
-
-	/* we can't call this function from this function since execbuf has
-	 * reserved fifo space.
-	 *
-	 * if (srf->snooper.crtc)
-	 *	vmw_ldu_crtc_cursor_update_image(dev_priv,
-	 *					 srf->snooper.image, 64, 64,
-	 *					 du->hotspot_x, du->hotspot_y);
-	 */
 
 	ttm_bo_kunmap(&map);
 err_unreserve:
@@ -741,179 +729,6 @@ void vmw_framebuffer_dmabuf_destroy(struct drm_framebuffer *framebuffer)
 	kfree(vfbd);
 }
 
-static int do_dmabuf_dirty_ldu(struct vmw_private *dev_priv,
-			       struct vmw_framebuffer *framebuffer,
-			       unsigned flags, unsigned color,
-			       struct drm_clip_rect *clips,
-			       unsigned num_clips, int increment)
-{
-	size_t fifo_size;
-	int i;
-
-	struct {
-		uint32_t header;
-		SVGAFifoCmdUpdate body;
-	} *cmd;
-
-	fifo_size = sizeof(*cmd) * num_clips;
-	cmd = vmw_fifo_reserve(dev_priv, fifo_size);
-	if (unlikely(cmd == NULL)) {
-		DRM_ERROR("Fifo reserve failed.\n");
-		return -ENOMEM;
-	}
-
-	memset(cmd, 0, fifo_size);
-	for (i = 0; i < num_clips; i++, clips += increment) {
-		cmd[i].header = cpu_to_le32(SVGA_CMD_UPDATE);
-		cmd[i].body.x = cpu_to_le32(clips->x1);
-		cmd[i].body.y = cpu_to_le32(clips->y1);
-		cmd[i].body.width = cpu_to_le32(clips->x2 - clips->x1);
-		cmd[i].body.height = cpu_to_le32(clips->y2 - clips->y1);
-	}
-
-	vmw_fifo_commit(dev_priv, fifo_size);
-	return 0;
-}
-
-static int do_dmabuf_define_gmrfb(struct drm_file *file_priv,
-				  struct vmw_private *dev_priv,
-				  struct vmw_framebuffer *framebuffer)
-{
-	int depth = framebuffer->base.depth;
-	size_t fifo_size;
-	int ret;
-
-	struct {
-		uint32_t header;
-		SVGAFifoCmdDefineGMRFB body;
-	} *cmd;
-
-	/* Emulate RGBA support, contrary to svga_reg.h this is not
-	 * supported by hosts. This is only a problem if we are reading
-	 * this value later and expecting what we uploaded back.
-	 */
-	if (depth == 32)
-		depth = 24;
-
-	fifo_size = sizeof(*cmd);
-	cmd = kmalloc(fifo_size, GFP_KERNEL);
-	if (unlikely(cmd == NULL)) {
-		DRM_ERROR("Failed to allocate temporary cmd buffer.\n");
-		return -ENOMEM;
-	}
-
-	memset(cmd, 0, fifo_size);
-	cmd->header = SVGA_CMD_DEFINE_GMRFB;
-	cmd->body.format.bitsPerPixel = framebuffer->base.bits_per_pixel;
-	cmd->body.format.colorDepth = depth;
-	cmd->body.format.reserved = 0;
-	cmd->body.bytesPerLine = framebuffer->base.pitch;
-	cmd->body.ptr.gmrId = framebuffer->user_handle;
-	cmd->body.ptr.offset = 0;
-
-	ret = vmw_execbuf_process(file_priv, dev_priv, NULL, cmd,
-				  fifo_size, 0, NULL, NULL);
-
-	kfree(cmd);
-
-	return ret;
-}
-
-static int do_dmabuf_dirty_sou(struct drm_file *file_priv,
-			       struct vmw_private *dev_priv,
-			       struct vmw_framebuffer *framebuffer,
-			       unsigned flags, unsigned color,
-			       struct drm_clip_rect *clips,
-			       unsigned num_clips, int increment,
-			       struct vmw_fence_obj **out_fence)
-{
-	struct vmw_display_unit *units[VMWGFX_NUM_DISPLAY_UNITS];
-	struct drm_clip_rect *clips_ptr;
-	int i, k, num_units, ret;
-	struct drm_crtc *crtc;
-	size_t fifo_size;
-
-	struct {
-		uint32_t header;
-		SVGAFifoCmdBlitGMRFBToScreen body;
-	} *blits;
-
-	ret = do_dmabuf_define_gmrfb(file_priv, dev_priv, framebuffer);
-	if (unlikely(ret != 0))
-		return ret; /* define_gmrfb prints warnings */
-
-	fifo_size = sizeof(*blits) * num_clips;
-	blits = kmalloc(fifo_size, GFP_KERNEL);
-	if (unlikely(blits == NULL)) {
-		DRM_ERROR("Failed to allocate temporary cmd buffer.\n");
-		return -ENOMEM;
-	}
-
-	num_units = 0;
-	list_for_each_entry(crtc, &dev_priv->dev->mode_config.crtc_list, head) {
-		if (crtc->fb != &framebuffer->base)
-			continue;
-		units[num_units++] = vmw_crtc_to_du(crtc);
-	}
-
-	for (k = 0; k < num_units; k++) {
-		struct vmw_display_unit *unit = units[k];
-		int hit_num = 0;
-
-		clips_ptr = clips;
-		for (i = 0; i < num_clips; i++, clips_ptr += increment) {
-			int clip_x1 = clips_ptr->x1 - unit->crtc.x;
-			int clip_y1 = clips_ptr->y1 - unit->crtc.y;
-			int clip_x2 = clips_ptr->x2 - unit->crtc.x;
-			int clip_y2 = clips_ptr->y2 - unit->crtc.y;
-			int move_x, move_y;
-
-			/* skip any crtcs that misses the clip region */
-			if (clip_x1 >= unit->crtc.mode.hdisplay ||
-			    clip_y1 >= unit->crtc.mode.vdisplay ||
-			    clip_x2 <= 0 || clip_y2 <= 0)
-				continue;
-
-			/* clip size to crtc size */
-			clip_x2 = min_t(int, clip_x2, unit->crtc.mode.hdisplay);
-			clip_y2 = min_t(int, clip_y2, unit->crtc.mode.vdisplay);
-
-			/* translate both src and dest to bring clip into screen */
-			move_x = min_t(int, clip_x1, 0);
-			move_y = min_t(int, clip_y1, 0);
-
-			/* actual translate done here */
-			blits[hit_num].header = SVGA_CMD_BLIT_GMRFB_TO_SCREEN;
-			blits[hit_num].body.destScreenId = unit->unit;
-			blits[hit_num].body.srcOrigin.x = clips_ptr->x1 - move_x;
-			blits[hit_num].body.srcOrigin.y = clips_ptr->y1 - move_y;
-			blits[hit_num].body.destRect.left = clip_x1 - move_x;
-			blits[hit_num].body.destRect.top = clip_y1 - move_y;
-			blits[hit_num].body.destRect.right = clip_x2;
-			blits[hit_num].body.destRect.bottom = clip_y2;
-			hit_num++;
-		}
-
-		/* no clips hit the crtc */
-		if (hit_num == 0)
-			continue;
-
-		/* only return the last fence */
-		if (out_fence && *out_fence)
-			vmw_fence_obj_unreference(out_fence);
-
-		fifo_size = sizeof(*blits) * hit_num;
-		ret = vmw_execbuf_process(file_priv, dev_priv, NULL, blits,
-					  fifo_size, 0, NULL, out_fence);
-
-		if (unlikely(ret != 0))
-			break;
-	}
-
-	kfree(blits);
-
-	return ret;
-}
 
 int vmw_framebuffer_dmabuf_dirty(struct drm_framebuffer *framebuffer,
 				 struct drm_file *file_priv,
@@ -944,13 +759,15 @@ int vmw_framebuffer_dmabuf_dirty(struct drm_framebuffer *framebuffer,
 	}
 
 	if (dev_priv->ldu_priv) {
-		ret = do_dmabuf_dirty_ldu(dev_priv, &vfbd->base,
-					  flags, color,
-					  clips, num_clips, increment);
+		ret = vmw_kms_ldu_do_dmabuf_dirty(dev_priv, &vfbd->base,
+						  flags, color,
+						  clips, num_clips, increment);
 	} else {
-		ret = do_dmabuf_dirty_sou(file_priv, dev_priv, &vfbd->base,
-					  flags, color,
-					  clips, num_clips, increment, NULL);
+		ret = vmw_kms_sou_do_dmabuf_dirty(file_priv, dev_priv,
+						  &vfbd->base,
+						  flags, color,
+						  clips, num_clips, increment,
+						  NULL);
 	}
 
 	ttm_read_unlock(&vmaster->lock);
@@ -1670,77 +1487,16 @@ int vmw_du_update_layout(struct vmw_private *dev_priv, unsigned num,
 	return 0;
 }
 
-int vmw_du_page_flip(struct drm_crtc *crtc,
-		     struct drm_framebuffer *fb,
-		     struct drm_pending_vblank_event *event)
-{
-	struct vmw_private *dev_priv = vmw_priv(crtc->dev);
-	struct drm_framebuffer *old_fb = crtc->fb;
-	struct vmw_framebuffer *vfb = vmw_framebuffer_to_vfb(fb);
-	struct drm_file *file_priv = event->base.file_priv;
-	struct vmw_fence_obj *fence = NULL;
-	struct drm_clip_rect clips;
-	int ret;
-
-	/* require ScreenObject support for page flipping */
-	if (!dev_priv->sou_priv)
-		return -ENOSYS;
-
-	if (!vmw_kms_screen_object_flippable(dev_priv, crtc))
-		return -EINVAL;
-
-	crtc->fb = fb;
-
-	/* do a full screen dirty update */
-	clips.x1 = clips.y1 = 0;
-	clips.x2 = fb->width;
-	clips.y2 = fb->height;
-
-	if (vfb->dmabuf)
-		ret = do_dmabuf_dirty_sou(file_priv, dev_priv, vfb,
-					  0, 0, &clips, 1, 1, &fence);
-	else
-		ret = do_surface_dirty_sou(dev_priv, file_priv, vfb,
-					   0, 0, &clips, 1, 1, &fence);
-
-
-	if (ret != 0)
-		goto out_no_fence;
-	if (!fence) {
-		ret = -EINVAL;
-		goto out_no_fence;
-	}
-
-	ret = vmw_event_fence_action_queue(file_priv, fence,
-					   &event->base,
-					   &event->event.tv_sec,
-					   &event->event.tv_usec,
-					   true);
-
-	/*
-	 * No need to hold on to this now. The only cleanup
-	 * we need to do if we fail is unref the fence.
-	 */
-	vmw_fence_obj_unreference(&fence);
-
-	if (vmw_crtc_to_du(crtc)->is_implicit)
-		vmw_kms_screen_object_update_implicit_fb(dev_priv, crtc);
-
-	return ret;
-
-out_no_fence:
-	crtc->fb = old_fb;
-	return ret;
-}
-
 
 void vmw_du_crtc_save(struct drm_crtc *crtc)
 {
 }
 
+
 void vmw_du_crtc_restore(struct drm_crtc *crtc)
 {
 }
+
 
 void vmw_du_crtc_gamma_set(struct drm_crtc *crtc,
 			   u16 *r, u16 *g, u16 *b,

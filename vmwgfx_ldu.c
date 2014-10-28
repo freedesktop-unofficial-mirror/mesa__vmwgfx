@@ -445,3 +445,38 @@ int vmw_kms_close_legacy_display_system(struct vmw_private *dev_priv)
 
 	return 0;
 }
+
+
+int vmw_kms_ldu_do_dmabuf_dirty(struct vmw_private *dev_priv,
+				struct vmw_framebuffer *framebuffer,
+				unsigned flags, unsigned color,
+				struct drm_clip_rect *clips,
+				unsigned num_clips, int increment)
+{
+	size_t fifo_size;
+	int i;
+
+	struct {
+		uint32_t header;
+		SVGAFifoCmdUpdate body;
+	} *cmd;
+
+	fifo_size = sizeof(*cmd) * num_clips;
+	cmd = vmw_fifo_reserve(dev_priv, fifo_size);
+	if (unlikely(cmd == NULL)) {
+		DRM_ERROR("Fifo reserve failed.\n");
+		return -ENOMEM;
+	}
+
+	memset(cmd, 0, fifo_size);
+	for (i = 0; i < num_clips; i++, clips += increment) {
+		cmd[i].header = cpu_to_le32(SVGA_CMD_UPDATE);
+		cmd[i].body.x = cpu_to_le32(clips->x1);
+		cmd[i].body.y = cpu_to_le32(clips->y1);
+		cmd[i].body.width = cpu_to_le32(clips->x2 - clips->x1);
+		cmd[i].body.height = cpu_to_le32(clips->y2 - clips->y1);
+	}
+
+	vmw_fifo_commit(dev_priv, fifo_size);
+	return 0;
+}
