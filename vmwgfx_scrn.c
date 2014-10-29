@@ -1,6 +1,6 @@
 /**************************************************************************
  *
- * Copyright © 2011 VMware, Inc., Palo Alto, CA., USA
+ * Copyright © 2011-2014 VMware, Inc., Palo Alto, CA., USA
  * All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -273,13 +273,13 @@ static int vmw_sou_crtc_set_config(struct drm_mode_set *set)
 	dev_priv = vmw_priv(crtc->dev);
 
 	if (set->num_connectors > 1) {
-		DRM_ERROR("to many connectors\n");
+		DRM_ERROR("Too many connectors\n");
 		return -EINVAL;
 	}
 
 	if (set->num_connectors == 1 &&
 	    set->connectors[0] != &sou->base.connector) {
-		DRM_ERROR("connector doesn't match %p %p\n",
+		DRM_ERROR("Connector doesn't match %p %p\n",
 			set->connectors[0], &sou->base.connector);
 		return -EINVAL;
 	}

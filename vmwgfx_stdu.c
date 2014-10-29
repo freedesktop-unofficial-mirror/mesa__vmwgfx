@@ -43,7 +43,12 @@
  *  TBD for when a bounce buffer is implemented
  */
 struct vmw_screen_target_display {
-
+	/* Once bounce buffer is implemented, its definition will come here.
+	 * The current code cannot support all of the KMS features, e.g.
+	 * panning, extended desktop.  To get that to work, we need to allocate
+	 * a large bounce buffer and blit the appropriate content to the
+	 * screen target(s)
+	 */
 };
 
 
@@ -82,8 +87,8 @@ static void vmw_stdu_crtc_destroy(struct drm_crtc *crtc)
  *
  * @dev_priv:  VMW DRM device
  * @stdu: display unit to create a Screen Target for
- * @x: X offset for the screen target
- * @y: Y offset for the screen target
+ * @x: X offset for the screen target in the display topology
+ * @y: Y offset for the screen target in the display topology
  * @mode:  mode parameters
  *
  * Creates a STDU that we can used later.  This function is called whenever the
@@ -97,6 +102,33 @@ static int vmw_stdu_define_st(struct vmw_private *dev_priv,
 			      uint32_t x, uint32_t y,
 			      struct drm_display_mode *mode)
 {
+	struct {
+		SVGA3dCmdHeader header;
+		SVGA3dCmdDefineGBScreenTarget body;
+	} *cmd;
+
+	cmd = vmw_fifo_reserve(dev_priv, sizeof(*cmd));
+
+	if (unlikely(cmd == NULL)) {
+		DRM_ERROR("Out of FIFO space defining Screen Target\n");
+		return -ENOMEM;
+	}
+
+	cmd->header.id   = SVGA_3D_CMD_DEFINE_GB_SCREENTARGET;
+	cmd->header.size = sizeof(cmd->body);
+
+	cmd->body.stid   = stdu->base.unit;
+	cmd->body.width  = mode->hdisplay;
+	cmd->body.height = mode->vdisplay;
+	cmd->body.xRoot  = x;
+	cmd->body.yRoot  = y;
+	cmd->body.flags  = (0 == cmd->body.stid) ? SVGA_STFLAG_PRIMARY : 0;
+	cmd->body.dpi    = 0;
+
+	vmw_fifo_commit(dev_priv, sizeof(*cmd));
+
+	stdu->defined = true;
+
 	return 0;
 }
 
@@ -107,14 +139,50 @@ static int vmw_stdu_define_st(struct vmw_private *dev_priv,
  *
  * @dev_priv: VMW DRM device
  * @stdu: display unit affected
- * @vfb: Buffer to bind to the screen target.  Set to NULL to blank screen.
+ * @fb: Buffer to bind to the screen target.  Set to NULL to blank screen.
  *
  * Binding a surface to a Screen Target the same as flipping
  */
 static int vmw_stdu_bind_st(struct vmw_private *dev_priv,
 			    struct vmw_screen_target_display_unit *stdu,
-			    struct vmw_framebuffer *vfb)
+			    struct drm_framebuffer *fb)
 {
+	struct vmw_surface *surface = NULL;
+	SVGA3dSurfaceImageId image;
+
+	struct {
+		SVGA3dCmdHeader header;
+		SVGA3dCmdBindGBScreenTarget body;
+	} *cmd;
+
+
+	if (!stdu->defined) {
+		DRM_ERROR("No screen target defined\n");
+		return -EINVAL;
+	}
+
+	if (fb)
+		surface = (vmw_framebuffer_to_vfbs(fb))->surface;
+
+	/* Set up image using information in vfb */
+	memset(&image, 0, sizeof(image));
+	image.sid = surface ? surface->res.id : SVGA3D_INVALID_ID;
+
+	cmd = vmw_fifo_reserve(dev_priv, sizeof(*cmd));
+
+	if (unlikely(cmd == NULL)) {
+		DRM_ERROR("Out of FIFO space binding a screen target\n");
+		return -ENOMEM;
+	}
+
+	cmd->header.id   = SVGA_3D_CMD_BIND_GB_SCREENTARGET;
+	cmd->header.size = sizeof(cmd->body);
+
+	cmd->body.stid   = stdu->base.unit;
+	cmd->body.image  = image;
+
+	vmw_fifo_commit(dev_priv, sizeof(*cmd));
+
 	return 0;
 }
 
@@ -137,6 +205,35 @@ static int vmw_stdu_update_st(struct vmw_private *dev_priv,
 			      struct vmw_screen_target_display_unit *stdu,
 			      struct drm_clip_rect *update_area)
 {
+	struct {
+		SVGA3dCmdHeader header;
+		SVGA3dCmdUpdateGBScreenTarget body;
+	} *cmd;
+
+
+	if (!stdu->defined) {
+		DRM_ERROR("No screen target defined");
+		return -EINVAL;
+	}
+
+	cmd = vmw_fifo_reserve(dev_priv, sizeof(*cmd));
+
+	if (unlikely(cmd == NULL)) {
+		DRM_ERROR("Out of FIFO space updating a Screen Target\n");
+		return -ENOMEM;
+	}
+
+	cmd->header.id   = SVGA_3D_CMD_UPDATE_GB_SCREENTARGET;
+	cmd->header.size = sizeof(cmd->body);
+
+	cmd->body.stid   = stdu->base.unit;
+	cmd->body.rect.x = update_area->x1;
+	cmd->body.rect.y = update_area->y1;
+	cmd->body.rect.w = update_area->x2 - update_area->x1;
+	cmd->body.rect.h = update_area->y2 - update_area->y1;
+
+	vmw_fifo_commit(dev_priv, sizeof(*cmd));
+
 	return 0;
 }
 
@@ -151,7 +248,40 @@ static int vmw_stdu_update_st(struct vmw_private *dev_priv,
 static int vmw_stdu_destroy_st(struct vmw_private *dev_priv,
 			       struct vmw_screen_target_display_unit *stdu)
 {
-	return 0;
+	int    ret;
+
+	struct {
+		SVGA3dCmdHeader header;
+		SVGA3dCmdDestroyGBScreenTarget body;
+	} *cmd;
+
+
+	/* Nothing to do if not successfully defined */
+	if (unlikely(!stdu->defined))
+		return 0;
+
+	cmd = vmw_fifo_reserve(dev_priv, sizeof(*cmd));
+
+	if (unlikely(cmd == NULL)) {
+		DRM_ERROR("Out of FIFO space, screen target not destroyed\n");
+		return -ENOMEM;
+	}
+
+	cmd->header.id   = SVGA_3D_CMD_DESTROY_GB_SCREENTARGET;
+	cmd->header.size = sizeof(cmd->body);
+
+	cmd->body.stid   = stdu->base.unit;
+
+	vmw_fifo_commit(dev_priv, sizeof(*cmd));
+
+	/* Force sync */
+	ret = vmw_fallback_wait(dev_priv, false, true, 0, false, 3*HZ);
+	if (unlikely(ret != 0))
+		DRM_ERROR("Failed to sync with HW");
+
+	stdu->defined = false;
+
+	return ret;
 }
 
 
@@ -170,7 +300,133 @@ static int vmw_stdu_destroy_st(struct vmw_private *dev_priv,
  */
 static int vmw_stdu_crtc_set_config(struct drm_mode_set *set)
 {
-	return 0;
+	struct vmw_private *dev_priv;
+	struct vmw_screen_target_display_unit *stdu;
+	struct vmw_framebuffer_surface *new_vfbs, *cur_vfbs;
+	struct drm_display_mode *mode;
+	struct drm_framebuffer  *new_fb;
+	struct drm_crtc      *crtc;
+	struct drm_encoder   *encoder;
+	struct drm_connector *connector;
+	struct drm_clip_rect update_area = {0};
+	int    ret;
+
+
+	if (!set || !set->crtc)
+		return -EINVAL;
+
+	crtc     = set->crtc;
+	stdu     = vmw_crtc_to_stdu(crtc);
+	mode     = set->mode;
+	new_fb   = set->fb;
+	new_vfbs = new_fb ? vmw_framebuffer_to_vfbs(new_fb) : NULL;
+	cur_vfbs = crtc->fb ? vmw_framebuffer_to_vfbs(crtc->fb) : NULL;
+	dev_priv = vmw_priv(crtc->dev);
+
+
+	if (new_vfbs && new_vfbs->base.dmabuf) {
+		DRM_ERROR("DMA Buffer cannot be used with Screen Targets\n");
+		return -EINVAL;
+	}
+
+	if (set->num_connectors > 1) {
+		DRM_ERROR("Too many connectors\n");
+		return -EINVAL;
+	}
+
+	if (set->num_connectors == 1 &&
+	    set->connectors[0] != &stdu->base.connector) {
+		DRM_ERROR("Connectors don't match %p %p\n",
+			set->connectors[0], &stdu->base.connector);
+		return -EINVAL;
+	}
+
+	/* Since they always map one to one these are safe */
+	connector = &stdu->base.connector;
+	encoder   = &stdu->base.encoder;
+
+	/* After this point the CRTC will be considered off unless a new fb
+	 * is bound
+	 */
+	if (stdu->defined) {
+		/* Blank the display, this also unbinds the current surface */
+		ret = vmw_stdu_bind_st(dev_priv, stdu, NULL);
+		if (unlikely(ret != 0))
+			return ret;
+	}
+
+	crtc->fb           = NULL;
+	crtc->x            = 0;
+	crtc->y            = 0;
+	crtc->enabled      = false;
+	encoder->crtc      = NULL;
+	connector->encoder = NULL;
+
+	/* Unbind the current fb, if any */
+	if (cur_vfbs) {
+		vmw_resource_unpin(&cur_vfbs->surface->res);
+
+		ret = vmw_stdu_destroy_st(dev_priv, stdu);
+		/* The hardware is hung, give up */
+		if (unlikely(ret != 0))
+			return ret;
+	}
+
+
+	/* Any of these conditions means the caller wants CRTC to be off */
+	if (set->num_connectors == 0 || !mode || !new_vfbs)
+		return 0;
+
+
+	if (set->x + mode->hdisplay > new_fb->width ||
+	    set->y + mode->vdisplay > new_fb->height) {
+		DRM_ERROR("Set outside of framebuffer\n");
+		return -EINVAL;
+	}
+
+
+	/* Pin the buffer. This defines and binds the MOB and GB Surface */
+	ret = vmw_resource_pin(&new_vfbs->surface->res);
+	if (unlikely(ret != 0))
+		goto err;
+
+
+	/* Steps to displaying a surface, assume surface is already bound:
+	 *   1.  define a screen target
+	 *   2.  bind a fb to the screen target
+	 *   3.  update that screen target
+	 */
+	ret = vmw_stdu_define_st(dev_priv, stdu, set->x, set->y, mode);
+	if (unlikely(ret != 0))
+		goto err_unpin;
+
+	ret = vmw_stdu_bind_st(dev_priv, stdu, new_fb);
+	if (unlikely(ret != 0))
+		goto err_unpin_destroy_st;
+
+	update_area.x2 = new_fb->width;
+	update_area.y2 = new_fb->height;
+
+	ret = vmw_stdu_update_st(dev_priv, stdu, &update_area);
+	if (unlikely(ret != 0))
+		goto err_unpin_destroy_st;
+
+	connector->encoder = encoder;
+	encoder->crtc      = crtc;
+	crtc->mode    = *mode;
+	crtc->fb      = new_fb;
+	crtc->x       = set->x;
+	crtc->y       = set->y;
+	crtc->enabled = true;
+
+	return ret;
+
+err_unpin_destroy_st:
+	vmw_stdu_destroy_st(dev_priv, stdu);
+err_unpin:
+	vmw_resource_unpin(&new_vfbs->surface->res);
+err:
+	return ret;
 }
 
 
@@ -191,10 +447,79 @@ static int vmw_stdu_crtc_set_config(struct drm_mode_set *set)
  * 0 on success, error code on failure
  */
 static int vmw_stdu_crtc_page_flip(struct drm_crtc *crtc,
-				   struct drm_framebuffer *fb,
+				   struct drm_framebuffer *new_fb,
 				   struct drm_pending_vblank_event *event)
 {
-	return 0;
+	struct vmw_private *dev_priv = vmw_priv(crtc->dev);
+	struct vmw_screen_target_display_unit *stdu;
+	struct vmw_framebuffer_surface *new_vfbs;
+	struct drm_framebuffer *old_fb;
+	struct drm_file *file_priv = NULL;
+	struct vmw_fence_obj *fence = NULL;
+	struct drm_clip_rect update_area = {0};
+	int ret;
+
+
+	if (crtc == NULL)
+		return -EINVAL;
+
+	vmw_execbuf_fence_commands(NULL, dev_priv, &fence, NULL);
+	if (!fence)
+		return -EINVAL;
+
+
+	dev_priv = vmw_priv(crtc->dev);
+	stdu     = vmw_crtc_to_stdu(crtc);
+	old_fb   = crtc->fb;
+	crtc->fb = new_fb;
+	new_vfbs = vmw_framebuffer_to_vfbs(new_fb);
+
+	if (new_fb) {
+		update_area.x2 = new_fb->width;
+		update_area.y2 = new_fb->height;
+	}
+
+	if (event)
+		file_priv = event->base.file_priv;
+
+	if (stdu->defined) {
+		/* Blank the display, this also unbinds the current surface */
+		ret = vmw_stdu_bind_st(dev_priv, stdu, NULL);
+		if (unlikely(ret != 0))
+			goto err_unref_fence;
+	}
+
+	/* Unpin the current FB, if any */
+	if (old_fb) {
+		struct vmw_framebuffer_surface *current_vfbs;
+
+		current_vfbs = vmw_framebuffer_to_vfbs(old_fb);
+
+		vmw_resource_unpin(&current_vfbs->surface->res);
+	}
+
+	ret = vmw_resource_pin(&new_vfbs->surface->res);
+	if (unlikely(ret != 0))
+		goto err_unref_fence;
+
+	ret = vmw_stdu_bind_st(dev_priv, stdu, new_fb);
+	if (unlikely(ret != 0))
+		goto err_unref_fence;
+
+	ret = vmw_stdu_update_st(dev_priv, stdu, &update_area);
+	if (unlikely(ret != 0))
+		goto err_unref_fence;
+
+	ret = vmw_event_fence_action_queue(file_priv, fence,
+					   &event->base,
+					   &event->event.tv_sec,
+					   &event->event.tv_usec,
+					   true);
+
+err_unref_fence:
+	vmw_fence_obj_unreference(&fence);
+
+	return ret;
 }
 
 
@@ -285,6 +610,7 @@ static int vmw_stdu_init(struct vmw_private *dev_priv, unsigned unit)
 	struct drm_encoder *encoder;
 	struct drm_crtc *crtc;
 
+
 	stdu = kzalloc(sizeof(*stdu), GFP_KERNEL);
 	if (!stdu)
 		return -ENOMEM;
@@ -295,9 +621,9 @@ static int vmw_stdu_init(struct vmw_private *dev_priv, unsigned unit)
 	connector = &stdu->base.connector;
 
 	stdu->base.pref_active = (unit == 0);
-	stdu->base.pref_width = dev_priv->initial_width;
+	stdu->base.pref_width  = dev_priv->initial_width;
 	stdu->base.pref_height = dev_priv->initial_height;
-	stdu->base.pref_mode = NULL;
+	stdu->base.pref_mode   = NULL;
 	stdu->base.is_implicit = true;
 
 	drm_connector_init(dev, connector, &vmw_stdu_connector_funcs,
@@ -320,6 +646,7 @@ static int vmw_stdu_init(struct vmw_private *dev_priv, unsigned unit)
 
 	return 0;
 }
+
 
 
 /**
@@ -358,7 +685,54 @@ static void vmw_stdu_destroy(struct vmw_screen_target_display_unit *stdu)
  */
 int vmw_kms_stdu_init_display(struct vmw_private *dev_priv)
 {
-	return 1;
+	struct drm_device *dev = dev_priv->dev;
+	int i, ret;
+
+
+	/* Do nothing if Screen Target support is turned off */
+	if (!VMWGFX_ENABLE_SCREEN_TARGET_OTABLE)
+		return -ENOSYS;
+
+	if (dev_priv->stdu_priv) {
+		DRM_INFO("Screen Target Display device already enabled\n");
+		return -EINVAL;
+	}
+
+	if (!(dev_priv->capabilities & SVGA_CAP_GBOBJECTS)) {
+		DRM_INFO("Hardware cannot support Screen Target\n");
+		return -ENOSYS;
+	}
+
+	dev_priv->stdu_priv = kmalloc(sizeof(*dev_priv->stdu_priv),
+				      GFP_KERNEL);
+
+	if (unlikely(dev_priv->stdu_priv == NULL))
+		return -ENOMEM;
+
+
+	ret = drm_vblank_init(dev, VMWGFX_NUM_DISPLAY_UNITS);
+	if (unlikely(ret != 0))
+		goto err_free;
+
+	ret = drm_mode_create_dirty_info_property(dev);
+	if (unlikely(ret != 0))
+		goto err_vblank_cleanup;
+
+	for (i = 0; i < VMWGFX_NUM_DISPLAY_UNITS; ++i)
+		vmw_stdu_init(dev_priv, i);
+
+	dev_priv->active_display_unit = vmw_du_screen_target;
+
+	DRM_INFO("Screen Target Display device initialized\n");
+
+	return 0;
+
+err_vblank_cleanup:
+	drm_vblank_cleanup(dev);
+err_free:
+	kfree(dev_priv->stdu_priv);
+	dev_priv->stdu_priv = NULL;
+	return ret;
 }
 
 
@@ -375,6 +749,18 @@ int vmw_kms_stdu_init_display(struct vmw_private *dev_priv)
  */
 int vmw_kms_stdu_close_display(struct vmw_private *dev_priv)
 {
+	struct drm_device *dev = dev_priv->dev;
+
+
+	if (!dev_priv->stdu_priv)
+		return -ENOSYS;
+
+	drm_vblank_cleanup(dev);
+
+	kfree(dev_priv->stdu_priv);
+	dev_priv->stdu_priv = NULL;
+
+
 	return 0;
 }
 
@@ -398,11 +784,39 @@ int vmw_kms_stdu_close_display(struct vmw_private *dev_priv)
  * 0 on success, error code otherwise
  */
 int vmw_kms_stdu_do_surface_dirty(struct vmw_private *dev_priv,
+				  struct drm_file *file_priv,
 				  struct vmw_framebuffer *framebuffer,
 				  struct drm_clip_rect *clip_rects,
 				  unsigned num_of_clip_rects, int increment)
 {
-	return 0;
-}
+	struct vmw_screen_target_display_unit *stdu[VMWGFX_NUM_DISPLAY_UNITS];
+	struct drm_clip_rect *cur_rect;
+	struct drm_crtc *crtc;
 
+	unsigned num_of_du = 0, cur_du, count = 0;
+	int      ret = 0;
+
+
+	BUG_ON(!clip_rects || !num_of_clip_rects);
+
+	/* Figure out all the DU affected by this surface */
+	list_for_each_entry(crtc, &dev_priv->dev->mode_config.crtc_list,
+			    head) {
+		if (crtc->fb != &framebuffer->base)
+			continue;
+
+		stdu[num_of_du++] = vmw_crtc_to_stdu(crtc);
+	}
+
+
+	for (cur_du = 0; cur_du < num_of_du; cur_du++)
+		for (cur_rect = clip_rects;
+		     count < num_of_clip_rects && ret == 0;
+		     cur_rect += increment, count++) {
+			ret = vmw_stdu_update_st(dev_priv, stdu[cur_du],
+						 cur_rect);
+		}
+
+	return ret;
+}
 

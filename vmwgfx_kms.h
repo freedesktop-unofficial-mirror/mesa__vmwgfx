@@ -1,6 +1,6 @@
 /**************************************************************************
  *
- * Copyright © 2009 VMware, Inc., Palo Alto, CA., USA
+ * Copyright © 2009-2014 VMware, Inc., Palo Alto, CA., USA
  * All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -38,6 +38,8 @@
 
 #define vmw_framebuffer_to_vfb(x) \
 	container_of(x, struct vmw_framebuffer, base)
+#define vmw_framebuffer_to_vfbs(x) \
+	container_of(x, struct vmw_framebuffer_surface, base.base)
 #define vmw_crtc_to_du(x) \
 	container_of(x, struct vmw_display_unit, crtc)
 #define vmw_connector_to_du(x) \
@@ -58,6 +60,15 @@ struct vmw_framebuffer {
 	bool dmabuf;
 	struct ttm_base_object *user_obj;
 	uint32_t user_handle;
+};
+
+
+struct vmw_framebuffer_surface {
+	struct vmw_framebuffer base;
+	struct vmw_surface *surface;
+	struct vmw_dma_buffer *buffer;
+	struct list_head head;
+	struct drm_master *master;
 };
 
 
@@ -198,6 +209,7 @@ int vmw_kms_sou_do_dmabuf_dirty(struct drm_file *file_priv,
 int vmw_kms_stdu_init_display(struct vmw_private *dev_priv);
 int vmw_kms_stdu_close_display(struct vmw_private *dev_priv);
 int vmw_kms_stdu_do_surface_dirty(struct vmw_private *dev_priv,
+				  struct drm_file *file_priv,
 				  struct vmw_framebuffer *framebuffer,
 				  struct drm_clip_rect *clips,
 				  unsigned num_clips, int increment);
