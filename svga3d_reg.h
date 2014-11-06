@@ -1,5 +1,5 @@
 /**********************************************************
- * Copyright 1998-2009 VMware, Inc.  All rights reserved.
+ * Copyright 1998-2014 VMware, Inc.  All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -2385,6 +2385,13 @@ struct {
    int32 xRoot;
    int32 yRoot;
    uint32 flags;
+
+   /*
+    * The physical DPI that the guest expects this screen displayed at.
+    *
+    * Guests which are not DPI-aware should set this to zero.
+    */
+   uint32 dpi;
 }
 SVGA3dCmdDefineGBScreenTarget;    /* SVGA_3D_CMD_DEFINE_GB_SCREENTARGET */
 
@@ -2404,7 +2411,7 @@ SVGA3dCmdBindGBScreenTarget;  /* SVGA_3D_CMD_BIND_GB_SCREENTARGET */
 typedef
 struct {
    uint32 stid;
-   SVGA3dBox box;
+   SVGA3dRect rect;
 }
 SVGA3dCmdUpdateGBScreenTarget;  /* SVGA_3D_CMD_UPDATE_GB_SCREENTARGET */
 
