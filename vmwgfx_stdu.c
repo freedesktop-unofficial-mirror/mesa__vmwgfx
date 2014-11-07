@@ -349,10 +349,20 @@ static int vmw_stdu_crtc_set_config(struct drm_mode_set *set)
 	 * is bound
 	 */
 	if (stdu->defined) {
-		/* Blank the display, this also unbinds the current surface */
+		/* Unbind the current surface by binding an invalid one */
 		ret = vmw_stdu_bind_st(dev_priv, stdu, NULL);
 		if (unlikely(ret != 0))
 			return ret;
+
+		/* Update the Screen Target, the display will now be blank */
+		if (crtc->fb) {
+			update_area.x2 = crtc->fb->width;
+			update_area.y2 = crtc->fb->height;
+
+			ret = vmw_stdu_update_st(dev_priv, stdu, &update_area);
+			if (unlikely(ret != 0))
+				return ret;
+		}
 	}
 
 	crtc->fb           = NULL;
@@ -483,7 +493,7 @@ static int vmw_stdu_crtc_page_flip(struct drm_crtc *crtc,
 		file_priv = event->base.file_priv;
 
 	if (stdu->defined) {
-		/* Blank the display, this also unbinds the current surface */
+		/* Unbind the current surface */
 		ret = vmw_stdu_bind_st(dev_priv, stdu, NULL);
 		if (unlikely(ret != 0))
 			goto err_unref_fence;
@@ -554,7 +564,7 @@ static struct drm_crtc_funcs vmw_stdu_crtc_funcs = {
  */
 static void vmw_stdu_encoder_destroy(struct drm_encoder *encoder)
 {
-	/* Clean up will be done by vmw_stdu_crtc_destroy */
+	vmw_stdu_destroy(vmw_encoder_to_stdu(encoder));
 }
 
 static struct drm_encoder_funcs vmw_stdu_encoder_funcs = {
@@ -577,7 +587,7 @@ static struct drm_encoder_funcs vmw_stdu_encoder_funcs = {
  */
 static void vmw_stdu_connector_destroy(struct drm_connector *connector)
 {
-	/* Clean up will be done by vmw_stdu_crtc_destroy */
+	vmw_stdu_destroy(vmw_connector_to_stdu(connector));
 }
 
 static struct drm_connector_funcs vmw_stdu_connector_funcs = {

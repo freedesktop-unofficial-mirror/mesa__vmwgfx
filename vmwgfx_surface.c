@@ -1235,7 +1235,11 @@ int vmw_gb_surface_define_ioctl(struct drm_device *dev, void *data,
 	user_srf->prime.base.shareable = false;
 	user_srf->prime.base.tfile = NULL;
 
-	/**
+	if (dev_priv->active_display_unit == vmw_du_screen_target &&
+	    srf->scanout)
+		srf->flags |= SVGA3D_SURFACE_SCREENTARGET;
+
+	/*
 	 * From this point, the generic resource management functions
 	 * destroy the object on failure.
 	 */

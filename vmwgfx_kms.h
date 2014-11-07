@@ -185,8 +185,6 @@ int vmw_kms_ldu_do_dmabuf_dirty(struct vmw_private *dev_priv,
  */
 int vmw_kms_sou_init_display(struct vmw_private *dev_priv);
 int vmw_kms_sou_close_display(struct vmw_private *dev_priv);
-int vmw_kms_sou_update_layout(struct vmw_private *dev_priv, unsigned num,
-			      struct drm_vmw_rect *rects);
 int vmw_kms_sou_do_surface_dirty(struct vmw_private *dev_priv,
 				 struct drm_file *file_priv,
 				 struct vmw_framebuffer *framebuffer,
