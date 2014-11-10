@@ -1002,6 +1002,7 @@ vmw_context_res_man(struct vmw_resource *ctx);
 /*
  * Surface management - vmwgfx_surface.c
  */
+struct vmw_user_surface;
 
 extern const struct vmw_user_resource_conv *user_surface_converter;
 
@@ -1021,6 +1022,15 @@ extern int vmw_surface_check(struct vmw_private *dev_priv,
 			     uint32_t handle, int *id);
 extern int vmw_surface_validate(struct vmw_private *dev_priv,
 				struct vmw_surface *srf);
+int vmw_surface_gb_priv_define(struct drm_device *dev,
+			       uint32_t user_accounting_size,
+			       uint32_t svga3d_flags,
+			       SVGA3dSurfaceFormat format,
+			       bool for_scanout,
+			       uint32_t num_mip_levels,
+			       uint32_t multisample_count,
+			       struct drm_vmw_size size,
+			       struct vmw_user_surface **user_srf_out);
 
 /*
  * Shader management - vmwgfx_shader.c
