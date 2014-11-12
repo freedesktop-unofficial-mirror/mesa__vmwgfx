@@ -648,7 +648,6 @@ struct drm_master {
 
 	struct kref refcount; /* refcount for this master */
 
-	struct list_head head; /**< each minor contains a list of masters */
 	struct drm_minor *minor; /**< link back to minor we are a master for */
 
 	char *unique;			/**< Unique identifier: e.g., busid */
@@ -961,7 +960,6 @@ struct drm_minor {
 	struct drm_info_node debugfs_nodes;
 
 	struct drm_master *master; /* currently active master for this node */
-	struct list_head master_list;
 	struct drm_mode_group mode_group;
 };
 
