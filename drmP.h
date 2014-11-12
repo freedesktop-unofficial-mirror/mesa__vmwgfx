@@ -161,6 +161,7 @@ extern void drm_ut_debug_printk(unsigned int request_level,
 #define DRIVER_IRQ_VBL2    0x800
 #define DRIVER_MODESET     0x2000
 #define DRIVER_PRIME       0x4000
+#define DRIVER_RENDER      0x8000
 
 /***********************************************************************/
 /** \name Begin the DRM... */
@@ -1123,6 +1124,7 @@ struct drm_device {
 	unsigned int agp_buffer_token;
 	struct drm_minor *control;		/**< Control node for card */
 	struct drm_minor *primary;		/**< render type primary screen head */
+	struct drm_minor *render;		/**< render node for card */
 
 	/** \name Drawable information */
 	/*@{ */
@@ -1205,6 +1207,11 @@ static inline int drm_mtrr_del(int handle, unsigned long offset,
 	return 0;
 }
 #endif
+
+static inline bool drm_is_render_client(struct drm_file *file_priv)
+{
+	return file_priv->minor->type == DRM_MINOR_RENDER;
+}
 
 /******************************************************************/
 /** \name Internal function definitions */
@@ -1433,6 +1440,7 @@ extern int drm_get_dev(struct pci_dev *pdev, const struct pci_device_id *ent,
 extern void drm_put_dev(struct drm_device *dev);
 extern int drm_put_minor(struct drm_minor **minor);
 extern unsigned int drm_debug;
+extern unsigned int drm_rnodes;
 
 extern unsigned int drm_vblank_offdelay;
 extern unsigned int drm_timestamp_precision;

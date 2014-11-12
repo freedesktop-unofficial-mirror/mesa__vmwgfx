@@ -460,6 +460,11 @@ int drm_get_dev(struct pci_dev *pdev, const struct pci_device_id *ent,
 	if ((ret = drm_get_minor(dev, &dev->primary, DRM_MINOR_LEGACY)))
 		goto err_g3;
 
+	if (drm_core_check_feature(dev, DRIVER_RENDER)) {
+		if ((ret = drm_get_minor(dev, &dev->render, DRM_MINOR_RENDER)))
+			goto no_render;
+	}
+
 	if (dev->driver->load) {
 		ret = dev->driver->load(dev, ent->driver_data);
 		if (ret)
@@ -483,6 +488,8 @@ int drm_get_dev(struct pci_dev *pdev, const struct pci_device_id *ent,
 	return 0;
 
 err_g4:
+	drm_put_minor(&dev->render);
+no_render:
 	drm_put_minor(&dev->primary);
 err_g3:
 	if (drm_core_check_feature(dev, DRIVER_MODESET))
@@ -577,6 +584,9 @@ void drm_put_dev(struct drm_device *dev)
 
 	if (drm_core_check_feature(dev, DRIVER_MODESET))
 		drm_put_minor(&dev->control);
+
+	if (dev->render)
+		drm_put_minor(&dev->render);
 
 	drm_put_minor(&dev->primary);
 
