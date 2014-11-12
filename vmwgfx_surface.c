@@ -894,6 +894,7 @@ out_unlock:
 int vmw_surface_reference_ioctl(struct drm_device *dev, void *data,
 				struct drm_file *file_priv)
 {
+	struct vmw_private *dev_priv = vmw_priv(dev);
 	union drm_vmw_surface_reference_arg *arg =
 	    (union drm_vmw_surface_reference_arg *)data;
 	struct drm_vmw_surface_arg *req = &arg->req;
@@ -905,7 +906,7 @@ int vmw_surface_reference_ioctl(struct drm_device *dev, void *data,
 	struct ttm_base_object *base;
 	int ret = -EINVAL;
 
-	base = ttm_base_object_lookup(tfile, req->sid);
+	base = ttm_base_object_lookup_for_ref(dev_priv->tdev, req->sid);
 	if (unlikely(base == NULL)) {
 		DRM_ERROR("Could not find surface to reference.\n");
 		return -EINVAL;
@@ -1318,7 +1319,7 @@ int vmw_gb_surface_reference_ioctl(struct drm_device *dev, void *data,
 	uint32_t backup_handle;
 	int ret = -EINVAL;
 
-	base = ttm_base_object_lookup(tfile, req->sid);
+	base = ttm_base_object_lookup_for_ref(dev_priv->tdev, req->sid);
 	if (unlikely(base == NULL)) {
 		DRM_ERROR("Could not find surface to reference.\n");
 		return -EINVAL;
