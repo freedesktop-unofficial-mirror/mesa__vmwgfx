@@ -572,7 +572,6 @@ int vmw_framebuffer_surface_dirty(struct drm_framebuffer *framebuffer,
 				  unsigned num_clips)
 {
 	struct vmw_private *dev_priv = vmw_priv(framebuffer->dev);
-	struct vmw_master *vmaster = vmw_master(file_priv->master);
 	struct vmw_framebuffer_surface *vfbs =
 		vmw_framebuffer_to_vfbs(framebuffer);
 	struct drm_clip_rect norect;
@@ -585,7 +584,7 @@ int vmw_framebuffer_surface_dirty(struct drm_framebuffer *framebuffer,
 	if (!dev_priv->sou_priv)
 		return -EINVAL;
 
-	ret = ttm_read_lock(&vmaster->lock, true);
+	ret = ttm_read_lock(&dev_priv->reservation_sem, true);
 	if (unlikely(ret != 0))
 		return ret;
 
@@ -604,7 +603,7 @@ int vmw_framebuffer_surface_dirty(struct drm_framebuffer *framebuffer,
 				   flags, color,
 				   clips, num_clips, inc, NULL);
 
-	ttm_read_unlock(&vmaster->lock);
+	ttm_read_unlock(&dev_priv->reservation_sem);
 	return 0;
 }
 
@@ -922,13 +921,12 @@ int vmw_framebuffer_dmabuf_dirty(struct drm_framebuffer *framebuffer,
 				 unsigned num_clips)
 {
 	struct vmw_private *dev_priv = vmw_priv(framebuffer->dev);
-	struct vmw_master *vmaster = vmw_master(file_priv->master);
 	struct vmw_framebuffer_dmabuf *vfbd =
 		vmw_framebuffer_to_vfbd(framebuffer);
 	struct drm_clip_rect norect;
 	int ret, increment = 1;
 
-	ret = ttm_read_lock(&vmaster->lock, true);
+	ret = ttm_read_lock(&dev_priv->reservation_sem, true);
 	if (unlikely(ret != 0))
 		return ret;
 
@@ -953,7 +951,7 @@ int vmw_framebuffer_dmabuf_dirty(struct drm_framebuffer *framebuffer,
 					  clips, num_clips, increment, NULL);
 	}
 
-	ttm_read_unlock(&vmaster->lock);
+	ttm_read_unlock(&dev_priv->reservation_sem);
 	return ret;
 }
 
@@ -1977,7 +1975,6 @@ int vmw_kms_update_layout_ioctl(struct drm_device *dev, void *data,
 	struct vmw_private *dev_priv = vmw_priv(dev);
 	struct drm_vmw_update_layout_arg *arg =
 		(struct drm_vmw_update_layout_arg *)data;
-	struct vmw_master *vmaster = vmw_master(file_priv->master);
 	void __user *user_rects;
 	struct drm_vmw_rect *rects;
 	unsigned rects_size;
@@ -1985,7 +1982,7 @@ int vmw_kms_update_layout_ioctl(struct drm_device *dev, void *data,
 	int i;
 	struct drm_mode_config *mode_config = &dev->mode_config;
 
-	ret = ttm_read_lock(&vmaster->lock, true);
+	ret = ttm_read_lock(&dev_priv->reservation_sem, true);
 	if (unlikely(ret != 0))
 		return ret;
 
@@ -2027,6 +2024,6 @@ int vmw_kms_update_layout_ioctl(struct drm_device *dev, void *data,
 out_free:
 	kfree(rects);
 out_unlock:
-	ttm_read_unlock(&vmaster->lock);
+	ttm_read_unlock(&dev_priv->reservation_sem);
 	return ret;
 }

@@ -224,7 +224,6 @@ int vmw_present_ioctl(struct drm_device *dev, void *data,
 	struct drm_vmw_present_arg *arg =
 		(struct drm_vmw_present_arg *)data;
 	struct vmw_surface *surface;
-	struct vmw_master *vmaster = vmw_master(file_priv->master);
 	struct drm_vmw_rect __user *clips_ptr;
 	struct drm_vmw_rect *clips = NULL;
 	struct drm_mode_object *obj;
@@ -273,7 +272,7 @@ int vmw_present_ioctl(struct drm_device *dev, void *data,
 	}
 	vfb = vmw_framebuffer_to_vfb(obj_to_fb(obj));
 
-	ret = ttm_read_lock(&vmaster->lock, true);
+	ret = ttm_read_lock(&dev_priv->reservation_sem, true);
 	if (unlikely(ret != 0))
 		goto out_no_ttm_lock;
 
@@ -293,7 +292,7 @@ int vmw_present_ioctl(struct drm_device *dev, void *data,
 	vmw_surface_unreference(&surface);
 
 out_no_surface:
-	ttm_read_unlock(&vmaster->lock);
+	ttm_read_unlock(&dev_priv->reservation_sem);
 out_no_ttm_lock:
 out_no_fb:
 	mutex_unlock(&dev->mode_config.mutex);
@@ -313,7 +312,6 @@ int vmw_present_readback_ioctl(struct drm_device *dev, void *data,
 	struct drm_vmw_fence_rep __user *user_fence_rep =
 		(struct drm_vmw_fence_rep __user *)
 		(unsigned long)arg->fence_rep;
-	struct vmw_master *vmaster = vmw_master(file_priv->master);
 	struct drm_vmw_rect __user *clips_ptr;
 	struct drm_vmw_rect *clips = NULL;
 	struct drm_mode_object *obj;
@@ -367,7 +365,7 @@ int vmw_present_readback_ioctl(struct drm_device *dev, void *data,
 		goto out_no_fb;
 	}
 
-	ret = ttm_read_lock(&vmaster->lock, true);
+	ret = ttm_read_lock(&dev_priv->reservation_sem, true);
 	if (unlikely(ret != 0))
 		goto out_no_ttm_lock;
 
@@ -375,7 +373,7 @@ int vmw_present_readback_ioctl(struct drm_device *dev, void *data,
 			       vfb, user_fence_rep,
 			       clips, num_clips);
 
-	ttm_read_unlock(&vmaster->lock);
+	ttm_read_unlock(&dev_priv->reservation_sem);
 out_no_ttm_lock:
 out_no_fb:
 	mutex_unlock(&dev->mode_config.mutex);
