@@ -1108,7 +1108,7 @@ int drm_mode_getresources(struct drm_device *dev, void *data,
 	list_for_each(lh, &file_priv->fbs)
 		fb_count++;
 
-	if (file_priv->minor->type != DRM_MINOR_LEGACY) {
+	if (!drm_is_primary_client(file_priv)) {
 
 		mode_group = NULL;
 		list_for_each(lh, &dev->mode_config.crtc_list)
@@ -1847,7 +1847,7 @@ int drm_mode_getfb(struct drm_device *dev,
 	r->pitch = fb->pitch;
 	if (fb->funcs->create_handle) {
 		if (file_priv->is_master || capable(CAP_SYS_ADMIN) ||
-		    file_priv->minor->type == DRM_MINOR_CONTROL) {
+		    drm_is_control_client(file_priv)) {
 			ret = fb->funcs->create_handle(fb, file_priv,
 						       &r->handle);
 		} else {
