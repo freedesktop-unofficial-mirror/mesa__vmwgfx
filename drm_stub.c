@@ -173,6 +173,7 @@ static void drm_master_destroy(struct kref *kref)
 	struct drm_device *dev = master->minor->dev;
 	struct drm_map_list *r_list, *list_temp;
 
+	mutex_lock(&dev->struct_mutex);
 	if (dev->driver->master_destroy)
 		dev->driver->master_destroy(dev, master);
 
@@ -197,6 +198,7 @@ static void drm_master_destroy(struct kref *kref)
 
 	drm_ht_remove(&master->magiclist);
 
+	mutex_unlock(&dev->struct_mutex);
 	kfree(master);
 }
 
@@ -211,50 +213,56 @@ int drm_setmaster_ioctl(struct drm_device *dev, void *data,
 {
 	int ret = 0;
 
+	mutex_lock(&dev->master_mutex);
 	if (file_priv->is_master)
-		return 0;
+		goto out_unlock;
 
-	if (file_priv->minor->master && file_priv->minor->master != file_priv->master)
-		return -EINVAL;
-
-	if (!file_priv->master)
-		return -EINVAL;
-
-	if (!file_priv->minor->master &&
-	    file_priv->minor->master != file_priv->master) {
-		mutex_lock(&dev->struct_mutex);
-		file_priv->minor->master = drm_master_get(file_priv->master);
-		file_priv->is_master = 1;
-		if (dev->driver->master_set) {
-		    ret = dev->driver->master_set(dev, file_priv, false);
-		    if (unlikely(ret != 0)) {
-			file_priv->is_master = 0;
-			drm_master_put(&file_priv->minor->master);
-		    }
-		}
-		mutex_unlock(&dev->struct_mutex);
+	if (file_priv->minor->master) {
+		ret = -EINVAL;
+		goto out_unlock;
 	}
 
+	if (!file_priv->master) {
+		ret = -EINVAL;
+		goto out_unlock;
+	}
+
+	file_priv->minor->master = drm_master_get(file_priv->master);
+	file_priv->is_master = 1;
+	if (dev->driver->master_set) {
+		ret = dev->driver->master_set(dev, file_priv, false);
+		if (unlikely(ret != 0)) {
+			file_priv->is_master = 0;
+			drm_master_put(&file_priv->minor->master);
+		}
+	}
+
+out_unlock:
+	mutex_unlock(&dev->master_mutex);
 	return 0;
 }
 
 int drm_dropmaster_ioctl(struct drm_device *dev, void *data,
 			 struct drm_file *file_priv)
 {
+	int ret = -EINVAL;
+
+	mutex_lock(&dev->master_mutex);
 	if (!file_priv->is_master)
-		return -EINVAL;
+		goto out_unlock;
 
 	if (!file_priv->minor->master)
-		return -EINVAL;
+		goto out_unlock;
 
-	DRM_INFO("Dropmaster\n");
-	mutex_lock(&dev->struct_mutex);
+	ret = 0;
 	if (dev->driver->master_drop)
 	    dev->driver->master_drop(dev, file_priv, false);
 	drm_master_put(&file_priv->minor->master);
 	file_priv->is_master = 0;
-	mutex_unlock(&dev->struct_mutex);
-	return 0;
+
+out_unlock:
+	mutex_unlock(&dev->master_mutex);
+	return ret;
 }
 
 static int drm_fill_in_dev(struct drm_device * dev, struct pci_dev *pdev,
@@ -275,6 +283,7 @@ static int drm_fill_in_dev(struct drm_device * dev, struct pci_dev *pdev,
 	init_timer(&dev->timer);
 	mutex_init(&dev->struct_mutex);
 	mutex_init(&dev->ctxlist_mutex);
+	mutex_init(&dev->master_mutex);
 
 	idr_init(&dev->drw_idr);
 
@@ -492,6 +501,7 @@ err_g3:
 err_g2:
 	pci_disable_device(pdev);
 err_g1:
+	mutex_destroy(&dev->master_mutex);
 	kfree(dev);
 	mutex_unlock(&drm_global_mutex);
 	return ret;
@@ -593,6 +603,7 @@ void drm_put_dev(struct drm_device *dev)
 	if (dev->dev_mapping)
 		iput(container_of(dev->dev_mapping, struct inode, i_data));
 
+	mutex_destroy(&dev->master_mutex);
 	kfree(dev);
 }
 EXPORT_SYMBOL(drm_put_dev);
