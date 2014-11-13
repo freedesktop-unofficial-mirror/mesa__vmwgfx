@@ -120,20 +120,32 @@ int drm_open(struct inode *inode, struct file *filp)
 	if (!(dev = minor->dev))
 		return -ENODEV;
 
+	mutex_lock(&dev->struct_mutex);
+
+	/*
+	 * If we dont have an address space ("mapping") for this device,
+	 * use the address space from the first inode we encounter in open.
+	 * To make sure the inode doesn't go away while we use its address,
+	 * space, increase its refcount.
+	 * We also make sure subsequent inodes and filps use the same address
+	 * space, as much of the vm code we use depends on that. In particular
+	 * the unmap_mapping_range() function.
+	 */
+	if (!dev->dev_mapping) {
+		ihold(inode);
+		dev->dev_mapping = &inode->i_data;
+	} 
+
+	inode->i_mapping = dev->dev_mapping;
+	filp->f_mapping = dev->dev_mapping;
+	mutex_unlock(&dev->struct_mutex);
+
 	retcode = drm_open_helper(inode, filp, dev);
 	if (!retcode) {
 		atomic_inc(&dev->counts[_DRM_STAT_OPENS]);
 		if (!dev->open_count++)
 			retcode = drm_setup(dev);
 	}
-	mutex_lock(&dev->struct_mutex);
-	if (minor->type == DRM_MINOR_LEGACY) {
-		BUG_ON((dev->dev_mapping != NULL) &&
-			(dev->dev_mapping != inode->i_mapping));
-		if (dev->dev_mapping == NULL)
-			dev->dev_mapping = inode->i_mapping;
-	}
-	mutex_unlock(&dev->struct_mutex);
 
 	return retcode;
 }
