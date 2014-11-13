@@ -584,6 +584,10 @@ void drm_put_dev(struct drm_device *dev)
 		kfree(dev->devname);
 		dev->devname = NULL;
 	}
+
+	if (dev->dev_mapping)
+		iput(container_of(dev->dev_mapping, struct inode, i_data));
+
 	kfree(dev);
 }
 EXPORT_SYMBOL(drm_put_dev);
