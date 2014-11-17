@@ -31,19 +31,6 @@
 #include "svga3d_surfacedefs.h"
 
 /**
- * struct vmw_user_surface - User-space visible surface resource
- *
- * @base:           The TTM base object handling user-space visibility.
- * @srf:            The surface metadata.
- * @size:           TTM accounting size for the surface.
- */
-struct vmw_user_surface {
-	struct ttm_prime_object prime;
-	struct vmw_surface srf;
-	uint32_t size;
-};
-
-/**
  * struct vmw_surface_offset - Backing store mip level offset info
  *
  * @face:           Surface face.
@@ -1155,7 +1142,6 @@ static int vmw_gb_surface_destroy(struct vmw_resource *res)
 
 	return 0;
 }
-
 
 /**
  * vmw_gb_surface_define_ioctl - Ioctl function implementing

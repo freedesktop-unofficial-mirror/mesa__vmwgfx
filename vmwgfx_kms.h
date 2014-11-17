@@ -40,6 +40,8 @@
 	container_of(x, struct vmw_framebuffer, base)
 #define vmw_framebuffer_to_vfbs(x) \
 	container_of(x, struct vmw_framebuffer_surface, base.base)
+#define vmw_framebuffer_to_vfbd(x) \
+	container_of(x, struct vmw_framebuffer_dmabuf, base.base)
 #define vmw_crtc_to_du(x) \
 	container_of(x, struct vmw_display_unit, crtc)
 #define vmw_connector_to_du(x) \
@@ -70,6 +72,13 @@ struct vmw_framebuffer_surface {
 	struct list_head head;
 	struct drm_master *master;
 };
+
+
+struct vmw_framebuffer_dmabuf {
+	struct vmw_framebuffer base;
+	struct vmw_dma_buffer *buffer;
+};
+
 
 
 /*
@@ -211,5 +220,12 @@ int vmw_kms_stdu_do_surface_dirty(struct vmw_private *dev_priv,
 				  struct vmw_framebuffer *framebuffer,
 				  struct drm_clip_rect *clips,
 				  unsigned num_clips, int increment);
+int vmw_kms_stdu_present(struct vmw_private *dev_priv,
+			 struct drm_file *file_priv,
+			 struct vmw_framebuffer *vfb,
+			 uint32_t user_handle,
+			 int32_t dest_x, int32_t dest_y,
+			 struct drm_vmw_rect *clips,
+			 uint32_t num_clips);
 
 #endif

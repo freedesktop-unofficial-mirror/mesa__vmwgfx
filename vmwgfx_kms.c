@@ -500,9 +500,6 @@ static int vmw_kms_new_framebuffer_surface(struct vmw_private *dev_priv,
 	case 15:
 		format = SVGA3D_A1R5G5B5;
 		break;
-	case 8:
-		format = SVGA3D_LUMINANCE8;
-		break;
 	default:
 		DRM_ERROR("Invalid color depth: %d\n", mode_cmd->depth);
 		return -EINVAL;
@@ -557,14 +554,6 @@ out_err1:
 /*
  * Dmabuf framebuffer code
  */
-
-#define vmw_framebuffer_to_vfbd(x) \
-	container_of(x, struct vmw_framebuffer_dmabuf, base.base)
-
-struct vmw_framebuffer_dmabuf {
-	struct vmw_framebuffer base;
-	struct vmw_dma_buffer *buffer;
-};
 
 void vmw_framebuffer_dmabuf_destroy(struct drm_framebuffer *framebuffer)
 {
@@ -840,7 +829,7 @@ static struct drm_mode_config_funcs vmw_kms_funcs = {
 	.fb_create = vmw_kms_fb_create,
 };
 
-int vmw_kms_present(struct vmw_private *dev_priv,
+int vmw_kms_generic_present(struct vmw_private *dev_priv,
 		    struct drm_file *file_priv,
 		    struct vmw_framebuffer *vfb,
 		    struct vmw_surface *surface,
@@ -974,6 +963,23 @@ out_free_tmp:
 	kfree(tmp);
 
 	return ret;
+}
+
+int vmw_kms_present(struct vmw_private *dev_priv,
+		    struct drm_file *file_priv,
+		    struct vmw_framebuffer *vfb,
+		    struct vmw_surface *surface,
+		    uint32_t sid,
+		    int32_t destX, int32_t destY,
+		    struct drm_vmw_rect *clips,
+		    uint32_t num_clips)
+{
+	if (dev_priv->active_display_unit == vmw_du_screen_target)
+		return vmw_kms_stdu_present(dev_priv, file_priv, vfb, sid,
+					    destX, destY, clips, num_clips);
+
+	return vmw_kms_generic_present(dev_priv, file_priv, vfb, surface, sid,
+				       destX, destY, clips, num_clips);
 }
 
 int vmw_kms_readback(struct vmw_private *dev_priv,

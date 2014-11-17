@@ -168,6 +168,20 @@ struct vmw_surface {
 	uint32_t multisample_count;
 };
 
+/**
+ * struct vmw_user_surface - User-space visible surface resource
+ *
+ * @base:           The TTM base object handling user-space visibility.
+ * @srf:            The surface metadata.
+ * @size:           TTM accounting size for the surface.
+ */
+struct vmw_user_surface {
+	struct ttm_prime_object prime;
+	struct vmw_surface srf;
+	uint32_t size;
+};
+
+
 struct vmw_marker_queue {
 	struct list_head head;
 	struct timespec lag;
@@ -440,7 +454,6 @@ struct vmw_private {
 	enum vmw_display_unit_type active_display_unit;
 	struct vmw_legacy_display *ldu_priv;
 	struct vmw_screen_object_display *sou_priv;
-	struct vmw_screen_target_display *stdu_priv;
 	struct vmw_overlay *overlay_priv;
 
 	/*
