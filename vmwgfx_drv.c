@@ -666,16 +666,28 @@ static int vmw_driver_load(struct drm_device *dev, unsigned long chipset)
 		dev_priv->prim_bb_mem =
 			vmw_read(dev_priv,
 				 SVGA_REG_MAX_PRIMARY_BOUNDING_BOX_MEM);
-		dev_priv->max_mob_size = 
+		dev_priv->max_mob_size =
 			vmw_read(dev_priv, SVGA_REG_MOB_MAX_SIZE);
+
+		dev_priv->stdu_max_width =
+			vmw_read(dev_priv, SVGA_REG_SCREENTARGET_MAX_WIDTH);
+		dev_priv->stdu_max_height =
+			vmw_read(dev_priv, SVGA_REG_SCREENTARGET_MAX_HEIGHT);
+
+		vmw_write(dev_priv, SVGA_REG_DEV_CAP,
+			  SVGA3D_DEVCAP_MAX_TEXTURE_WIDTH);
+		dev_priv->texture_max_width = vmw_read(dev_priv,
+						       SVGA_REG_DEV_CAP);
+		vmw_write(dev_priv, SVGA_REG_DEV_CAP,
+			  SVGA3D_DEVCAP_MAX_TEXTURE_HEIGHT);
+		dev_priv->texture_max_height = vmw_read(dev_priv,
+							SVGA_REG_DEV_CAP);
 	} else
 		dev_priv->prim_bb_mem = dev_priv->vram_size;
 
-	/*
-	 * Limit back buffer size to VRAM size.  Remove this once
-	 * screen targets are implemented.
-	 */
-	if (dev_priv->prim_bb_mem > dev_priv->vram_size)
+	/* For non-screen target displays, limit back buffer to VRAM size */
+	if (!VMWGFX_ENABLE_SCREEN_TARGET_OTABLE &&
+	    dev_priv->prim_bb_mem > dev_priv->vram_size)
 		dev_priv->prim_bb_mem = dev_priv->vram_size;
 
 	mutex_unlock(&dev_priv->hw_mutex);

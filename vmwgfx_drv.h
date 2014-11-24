@@ -418,6 +418,10 @@ struct vmw_private {
 	uint32_t mmio_size;
 	uint32_t fb_max_width;
 	uint32_t fb_max_height;
+	uint32_t texture_max_width;
+	uint32_t texture_max_height;
+	uint32_t stdu_max_width;
+	uint32_t stdu_max_height;
 	uint32_t initial_width;
 	uint32_t initial_height;
 	__le32 __iomem *mmio_virt;

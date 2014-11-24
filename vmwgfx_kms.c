@@ -72,6 +72,7 @@ void vmw_du_cleanup(struct vmw_display_unit *du)
 		vmw_surface_unreference(&du->cursor_surface);
 	if (du->cursor_dmabuf)
 		vmw_dmabuf_unreference(&du->cursor_dmabuf);
+	drm_sysfs_connector_remove(&du->connector);
 	drm_crtc_cleanup(&du->crtc);
 	drm_encoder_cleanup(&du->encoder);
 	drm_connector_cleanup(&du->connector);
@@ -772,7 +773,7 @@ static struct drm_framebuffer *vmw_kms_fb_create(struct drm_device *dev,
 
 	required_size = mode_cmd->pitch * mode_cmd->height;
 	if (unlikely(required_size > (u64) dev_priv->prim_bb_mem)) {
-		DRM_ERROR("VRAM size is too small for requested mode.\n");
+		DRM_ERROR("Requested mode exceeds bounding box limit\n");
 		return ERR_PTR(-ENOMEM);
 	}
 
@@ -1532,32 +1533,35 @@ int vmw_du_connector_fill_modes(struct drm_connector *connector,
 	if (dev_priv->active_display_unit == vmw_du_screen_object)
 		assumed_bpp = 4;
 
-	/* Add preferred mode */
-	{
-		mode = drm_mode_duplicate(dev, &prefmode);
-		if (!mode)
-			return 0;
-		mode->hdisplay = du->pref_width;
-		mode->vdisplay = du->pref_height;
-		vmw_guess_mode_timing(mode);
-
-		if (vmw_kms_validate_mode_vram(dev_priv,
-						mode->hdisplay * assumed_bpp,
-						mode->vdisplay)) {
-			drm_mode_probed_add(connector, mode);
-		} else {
-			drm_mode_destroy(dev, mode);
-			mode = NULL;
-		}
-
-		if (du->pref_mode) {
-			list_del_init(&du->pref_mode->head);
-			drm_mode_destroy(dev, du->pref_mode);
-		}
-
-		/* mode might be null here, this is intended */
-		du->pref_mode = mode;
+	if (dev_priv->active_display_unit == vmw_du_screen_target) {
+		max_width  = min(max_width,  dev_priv->stdu_max_width);
+		max_height = min(max_height, dev_priv->stdu_max_height);
 	}
+
+	/* Add preferred mode */
+	mode = drm_mode_duplicate(dev, &prefmode);
+	if (!mode)
+		return 0;
+	mode->hdisplay = du->pref_width;
+	mode->vdisplay = du->pref_height;
+	vmw_guess_mode_timing(mode);
+
+	if (vmw_kms_validate_mode_vram(dev_priv,
+					mode->hdisplay * assumed_bpp,
+					mode->vdisplay)) {
+		drm_mode_probed_add(connector, mode);
+	} else {
+		drm_mode_destroy(dev, mode);
+		mode = NULL;
+	}
+
+	if (du->pref_mode) {
+		list_del_init(&du->pref_mode->head);
+		drm_mode_destroy(dev, du->pref_mode);
+	}
+
+	/* mode might be null here, this is intended */
+	du->pref_mode = mode;
 
 	for (i = 0; vmw_kms_connector_builtin[i].type != 0; i++) {
 		bmode = &vmw_kms_connector_builtin[i];
@@ -1608,6 +1612,7 @@ int vmw_kms_update_layout_ioctl(struct drm_device *dev, void *data,
 	int ret;
 	int i;
 	struct drm_mode_config *mode_config = &dev->mode_config;
+	struct drm_vmw_rect bounding_box = {0};
 
 	ret = ttm_read_lock(&vmaster->lock, true);
 	if (unlikely(ret != 0))
@@ -1644,7 +1649,30 @@ int vmw_kms_update_layout_ioctl(struct drm_device *dev, void *data,
 			ret = -EINVAL;
 			goto out_free;
 		}
+
+		/*
+		 * bounding_box.w and bunding_box.h are used as
+		 * lower-right coordinates
+		 */
+		if (rects[i].x + rects[i].w > bounding_box.w)
+			bounding_box.w = rects[i].x + rects[i].w;
+
+		if (rects[i].y + rects[i].h > bounding_box.h)
+			bounding_box.h = rects[i].y + rects[i].h;
 	}
+
+	/*
+	 * For Screen Target Display Unit, all the displays must fit
+	 * inside of maximum texture size.
+	 */
+	if (dev_priv->active_display_unit == vmw_du_screen_target)
+		if (bounding_box.w > dev_priv->texture_max_width ||
+		    bounding_box.h > dev_priv->texture_max_height) {
+			DRM_ERROR("Layout exceeds maximum texture size\n");
+			ret = -EINVAL;
+			goto out_free;
+		}
+
 
 	vmw_du_update_layout(dev_priv, arg->num_outputs, rects);
 
