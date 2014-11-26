@@ -690,6 +690,10 @@ static int vmw_cmd_surface_copy_check(struct vmw_private *dev_priv,
 				&cmd->body.src.sid, NULL);
 	if (unlikely(ret != 0))
 		return ret;
+
+	if (sw_context->quirks & VMW_QUIRK_SCREENTARGET)
+		return 0;
+
 	return vmw_cmd_res_check(dev_priv, sw_context, vmw_res_surface,
 				 user_surface_converter,
 				 &cmd->body.dest.sid, NULL);
@@ -1251,6 +1255,9 @@ static int vmw_cmd_dma(struct vmw_private *dev_priv,
 				      &vmw_bo);
 	if (unlikely(ret != 0))
 		return ret;
+
+	if (sw_context->quirks & VMW_QUIRK_SCREENTARGET)
+		goto out_no_surface;
 
 	ret = vmw_cmd_res_check(dev_priv, sw_context, vmw_res_surface,
 				user_surface_converter, &cmd->dma.host.sid,
@@ -2428,6 +2435,7 @@ int vmw_execbuf_process(struct drm_file *file_priv,
 			void *kernel_commands,
 			uint32_t command_size,
 			uint64_t throttle_us,
+			uint32_t quirks,
 			struct drm_vmw_fence_rep __user *user_fence_rep,
 			struct vmw_fence_obj **out_fence)
 {
@@ -2467,6 +2475,7 @@ int vmw_execbuf_process(struct drm_file *file_priv,
 	sw_context->cur_reloc = 0;
 	sw_context->cur_val_buf = 0;
 	sw_context->fence_flags = 0;
+	sw_context->quirks = quirks;
 	INIT_LIST_HEAD(&sw_context->resource_list);
 	sw_context->cur_query_bo = dev_priv->pinned_bo;
 	sw_context->last_query_ctx = NULL;
@@ -2784,6 +2793,7 @@ int vmw_execbuf_ioctl(struct drm_device *dev, void *data,
 	ret = vmw_execbuf_process(file_priv, dev_priv,
 				  (void __user *)(unsigned long)arg->commands,
 				  NULL, arg->command_size, arg->throttle_us,
+				  0,
 				  (void __user *)(unsigned long)arg->fence_rep,
 				  NULL);
 
