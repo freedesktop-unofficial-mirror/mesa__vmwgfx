@@ -62,7 +62,7 @@
 #include <linux/spinlock.h>
 #include <linux/slab.h>
 #include <linux/module.h>
-#include <asm/atomic.h>
+#include <linux/atomic.h>
 #include "vmwgfx_compat.h"
 
 struct ttm_object_file {
@@ -221,12 +221,7 @@ void ttm_base_object_unref(struct ttm_base_object **p_base)
 
 	*p_base = NULL;
 
-	/*
-	 * Need to take the lock here to avoid racing with
-	 * users trying to look up the object.
-	 */
-
-	(void)kref_put(&base->refcount, &ttm_release_base);
+	kref_put(&base->refcount, &ttm_release_base);
 }
 EXPORT_SYMBOL(ttm_base_object_unref);
 
@@ -342,7 +337,7 @@ int ttm_ref_object_add(struct ttm_object_file *tfile,
 
 		if (ret == 0) {
 			ref = drm_hash_entry(hash, struct ttm_ref_object, hash);
-			if (!kref_get_unless_zero(&ref->kref)) {
+			if (kref_get_unless_zero(&ref->kref)) {
 				rcu_read_unlock();
 				break;
 			}
