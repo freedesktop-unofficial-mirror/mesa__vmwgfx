@@ -478,4 +478,9 @@ int dma_buf_fd(struct dma_buf *dmabuf, int flags);
 #define set_need_resched()
 #endif
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 18, 0))
+#define smp_mb__before_atomic() smp_mb__before_atomic_inc()
+#define smp_mb__after_atomic() smp_mb__after_atomic_inc()
+#endif
+
 #endif

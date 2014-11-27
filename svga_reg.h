@@ -31,11 +31,14 @@
 
 #ifndef _SVGA_REG_H_
 #define _SVGA_REG_H_
+#include <linux/pci_ids.h>
 
 /*
  * PCI device IDs.
  */
+#ifndef PCI_VENDOR_ID_VMWARE
 #define PCI_VENDOR_ID_VMWARE            0x15AD
+#endif
 #define PCI_DEVICE_ID_VMWARE_SVGA2      0x0405
 
 /*
