@@ -418,7 +418,8 @@ static inline void set_page_locked(struct page *page)
 	hlist_add_behind_rcu(__item, __parent)
 #endif
 
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 18, 0))
+/* set_mb__[before|after]_atomic appeared in 3.16 */
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 16, 0))
 #define smp_mb__before_atomic() smp_mb__before_atomic_inc()
 #define smp_mb__after_atomic() smp_mb__after_atomic_inc()
 #endif
