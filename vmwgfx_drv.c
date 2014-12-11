@@ -185,13 +185,13 @@ static struct drm_ioctl_desc vmw_ioctls[] = {
 
 	/* these allow direct access to the framebuffers mark as master only */
 	VMW_IOCTL_DEF(DRM_IOCTL_VMW_PRESENT, vmw_present_ioctl,
-		      DRM_MASTER | DRM_AUTH | DRM_UNLOCKED),
+		      DRM_MASTER | DRM_CONTROL_ALLOW | DRM_UNLOCKED),
 	VMW_IOCTL_DEF(DRM_IOCTL_VMW_PRESENT_READBACK,
 		      vmw_present_readback_ioctl,
-		      DRM_MASTER | DRM_AUTH | DRM_UNLOCKED),
+		      DRM_MASTER | DRM_CONTROL_ALLOW | DRM_UNLOCKED),
 	VMW_IOCTL_DEF(DRM_IOCTL_VMW_UPDATE_LAYOUT,
 		      vmw_kms_update_layout_ioctl,
-		      DRM_MASTER | DRM_UNLOCKED),
+		      DRM_MASTER | DRM_CONTROL_ALLOW | DRM_UNLOCKED),
 	VMW_IOCTL_DEF(DRM_IOCTL_VMW_CREATE_SHADER,
 		      vmw_shader_define_ioctl,
 		      DRM_AUTH | DRM_UNLOCKED | DRM_RENDER_ALLOW),
