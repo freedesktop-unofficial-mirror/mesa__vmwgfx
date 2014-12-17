@@ -58,7 +58,6 @@ module_param_named(timestamp_precision_usec, drm_timestamp_precision, int, 0600)
 
 struct idr drm_minors_idr;
 
-struct class *drm_class;
 struct proc_dir_entry *drm_proc_root;
 struct dentry *drm_debugfs_root;
 void drm_ut_debug_printk(unsigned int request_level,
@@ -79,19 +78,24 @@ void drm_ut_debug_printk(unsigned int request_level,
 EXPORT_SYMBOL(drm_ut_debug_printk);
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(3,9,0))
-static int drm_minor_get_id(struct drm_device *dev, int type)
+static int drm_minor_get_id(struct drm_device *dev, int type, int old_base)
 {
 	int new_id;
 	int ret;
 	int base = 0, limit = 63;
 
-	if (type == DRM_MINOR_CONTROL) {
-                base += 64;
-                limit = base + 127;
-        } else if (type == DRM_MINOR_RENDER) {
-                base += 128;
-                limit = base + 255;
-        }
+	if (old_base < 0) {
+		if (type == DRM_MINOR_CONTROL) {
+			base += 64;
+			limit = base + 127;
+		} else if (type == DRM_MINOR_RENDER) {
+			base += 128;
+			limit = base + 255;
+		}
+	} else {
+		idr_remove(&drm_minors_idr, old_base);
+		base = old_base + 1;
+	}
 
 again:
 	if (idr_pre_get(&drm_minors_idr, GFP_KERNEL) == 0) {
@@ -115,17 +119,22 @@ again:
 	return new_id;
 }
 #else
-static int drm_minor_get_id(struct drm_device *dev, int type)
+static int drm_minor_get_id(struct drm_device *dev, int type, int old_base)
 {
 	int ret;
 	int base = 0, limit = 63;
 
-	if (type == DRM_MINOR_CONTROL) {
-		base += 64;
-		limit = base + 127;
-	} else if (type == DRM_MINOR_RENDER) {
-		base += 128;
-		limit = base + 255;
+	if (old_base < 0) {
+		if (type == DRM_MINOR_CONTROL) {
+			base += 64;
+			limit = base + 127;
+		} else if (type == DRM_MINOR_RENDER) {
+			base += 128;
+			limit = base + 255;
+		}
+	} else {
+		idr_remove(&drm_minors_idr, old_base);
+		base = old_base + 1;
 	}
 
 	mutex_lock(&dev->struct_mutex);
@@ -363,20 +372,32 @@ static int drm_get_minor(struct drm_device *dev, struct drm_minor **minor, int t
 
 	DRM_DEBUG("\n");
 
-	minor_id = drm_minor_get_id(dev, type);
-	if (minor_id < 0)
-		return minor_id;
-
 	new_minor = kzalloc(sizeof(struct drm_minor), GFP_KERNEL);
-	if (!new_minor) {
-		ret = -ENOMEM;
-		goto err_idr;
-	}
+	if (!new_minor)
+		return -ENOMEM;
 
 	new_minor->type = type;
-	new_minor->device = MKDEV(MAJOR(drm_chr_dev), minor_id);
 	new_minor->dev = dev;
-	new_minor->index = minor_id;
+	minor_id = -1;
+
+	/*
+	 * Real "core" drm doesn't share our minor namespace. If there is
+	 * a collision, drm_sysfs_device_add() will fail, and we retry with
+	 * a new minor id.
+	 */
+	do {
+		minor_id = drm_minor_get_id(dev, type, minor_id);
+		new_minor->device = MKDEV(MAJOR(drm_chr_dev), minor_id);
+		if (minor_id < 0) {
+			DRM_ERROR("Can't add a sysfs device with any "
+				  "minor id.\n");
+			ret = minor_id;
+			goto err_minor_id;
+		}
+
+		new_minor->index = minor_id;
+		ret = drm_sysfs_device_add(new_minor);
+	} while (ret != 0);
 
 	idr_replace(&drm_minors_idr, new_minor, minor_id);
 
@@ -396,13 +417,6 @@ static int drm_get_minor(struct drm_device *dev, struct drm_minor **minor, int t
 		goto err_g2;
 	}
 #endif
-
-	ret = drm_sysfs_device_add(new_minor);
-	if (ret) {
-		printk(KERN_ERR
-		       "DRM: Error sysfs_device_add.\n");
-		goto err_g2;
-	}
 	*minor = new_minor;
 
 	DRM_DEBUG("new minor assigned %d\n", minor_id);
@@ -413,9 +427,9 @@ err_g2:
 	if (new_minor->type == DRM_MINOR_LEGACY)
 		drm_proc_cleanup(new_minor, drm_proc_root);
 err_mem:
-	kfree(new_minor);
-err_idr:
 	idr_remove(&drm_minors_idr, minor_id);
+err_minor_id:
+	kfree(new_minor);
 	*minor = NULL;
 	return ret;
 }

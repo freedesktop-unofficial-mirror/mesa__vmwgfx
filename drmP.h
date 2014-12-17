@@ -95,7 +95,7 @@ struct drm_device;
 #undef EXPORT_SYMBOL_GPL
 #define EXPORT_SYMBOL_GPL(_dummy)
 
-#define VMWGFX_NUM_MINORS 16
+#define VMWGFX_NUM_MINORS 256
 #define VMWGFX_DEVICE_NAME "vmwgfx"
 
 extern dev_t drm_chr_dev;
@@ -1457,7 +1457,6 @@ extern unsigned int drm_rnodes;
 extern unsigned int drm_vblank_offdelay;
 extern unsigned int drm_timestamp_precision;
 
-extern struct class *drm_class;
 extern struct proc_dir_entry *drm_proc_root;
 extern struct dentry *drm_debugfs_root;
 

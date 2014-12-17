@@ -70,7 +70,7 @@ static int __init ttm_init(void)
 {
 	int ret;
 
-	ret = dev_set_name(&ttm_drm_class_device, "ttm");
+	ret = dev_set_name(&ttm_drm_class_device, "ttm_vmwgfx");
 	if (unlikely(ret != 0))
 		return ret;
 

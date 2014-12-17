@@ -338,18 +338,10 @@ int drm_core_init(void)
 	ret = vmwgfx_chrdev_reg();
 	if (ret)
 		goto err_p1;
-	drm_class = drm_sysfs_create(THIS_MODULE, VMWGFX_DEVICE_NAME);
 #else
 	if (register_chrdev(DRM_MAJOR, "drm", &drm_stub_fops))
 		goto err_p1;
-	drm_class = drm_sysfs_create(THIS_MODULE, DRM_NAME);
 #endif
-	if (IS_ERR(drm_class)) {
-		printk(KERN_ERR "DRM: Error creating drm class.\n");
-		ret = PTR_ERR(drm_class);
-		goto err_p2;
-	}
-
 	drm_proc_root = proc_mkdir("vmwgfx", NULL);
 	if (!drm_proc_root) {
 		DRM_ERROR("Cannot create /proc/vmwgfx\n");
@@ -370,8 +362,6 @@ int drm_core_init(void)
 err_p4:
 	remove_proc_entry("vmwgfx", NULL);
 err_p3:
-	drm_sysfs_destroy();
-err_p2:
 #ifdef VMWGFX_STANDALONE
 	cdev_del(&vmwgfx_cdev);
 	unregister_chrdev_region(drm_chr_dev, VMWGFX_NUM_MINORS);
@@ -390,7 +380,6 @@ void  drm_core_exit(void)
 {
 	remove_proc_entry("vmwgfx", NULL);
 	debugfs_remove(drm_debugfs_root);
-	drm_sysfs_destroy();
 
 #ifdef VMWGFX_STANDALONE
 	cdev_del(&vmwgfx_cdev);

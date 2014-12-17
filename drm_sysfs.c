@@ -28,142 +28,6 @@ static struct device_type drm_sysfs_device_minor = {
 };
 
 /**
- * drm_class_suspend - DRM class suspend hook
- * @dev: Linux device to suspend
- * @state: power state to enter
- *
- * Just figures out what the actual struct drm_device associated with
- * @dev is and calls its suspend hook, if present.
- */
-static int drm_class_suspend(struct device *dev, pm_message_t state)
-{
-	if (dev->type == &drm_sysfs_device_minor) {
-		struct drm_minor *drm_minor = to_drm_minor(dev);
-		struct drm_device *drm_dev = drm_minor->dev;
-
-		if (drm_minor->type == DRM_MINOR_LEGACY &&
-		    !drm_core_check_feature(drm_dev, DRIVER_MODESET) &&
-		    drm_dev->driver->suspend)
-			return drm_dev->driver->suspend(drm_dev, state);
-	}
-	return 0;
-}
-
-/**
- * drm_class_resume - DRM class resume hook
- * @dev: Linux device to resume
- *
- * Just figures out what the actual struct drm_device associated with
- * @dev is and calls its resume hook, if present.
- */
-static int drm_class_resume(struct device *dev)
-{
-	if (dev->type == &drm_sysfs_device_minor) {
-		struct drm_minor *drm_minor = to_drm_minor(dev);
-		struct drm_device *drm_dev = drm_minor->dev;
-
-		if (drm_minor->type == DRM_MINOR_LEGACY &&
-		    !drm_core_check_feature(drm_dev, DRIVER_MODESET) &&
-		    drm_dev->driver->resume)
-			return drm_dev->driver->resume(drm_dev);
-	}
-	return 0;
-}
-
-/* Display the version of drm_core. This doesn't work right in current design */
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,34))
-static ssize_t version_show(struct class *dev, char *buf)
-{
-	return sprintf(buf, "%s %d.%d.%d %s\n", CORE_NAME, CORE_MAJOR,
-		       CORE_MINOR, CORE_PATCHLEVEL, CORE_DATE);
-}
-
-static CLASS_ATTR(version, S_IRUGO, version_show, NULL);
-#else
-static CLASS_ATTR_STRING(version, S_IRUGO,
-		CORE_NAME " "
-		__stringify(CORE_MAJOR) "."
-		__stringify(CORE_MINOR) "."
-		__stringify(CORE_PATCHLEVEL) " "
-		CORE_DATE);
-#endif
-
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,2,0))
-static char *drm_devnode(struct device *dev, umode_t *mode)
-{
-	return kasprintf(GFP_KERNEL, "dri/%s", dev_name(dev));
-}
-#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,32))
-static char *drm_devnode(struct device *dev, mode_t *mode)
-{
-	return kasprintf(GFP_KERNEL, "dri/%s", dev_name(dev));
-}
-#endif
-
-
-/**
- * drm_sysfs_create - create a struct drm_sysfs_class structure
- * @owner: pointer to the module that is to "own" this struct drm_sysfs_class
- * @name: pointer to a string for the name of this class.
- *
- * This is used to create DRM class pointer that can then be used
- * in calls to drm_sysfs_device_add().
- *
- * Note, the pointer created here is to be destroyed when finished by making a
- * call to drm_sysfs_destroy().
- */
-struct class *drm_sysfs_create(struct module *owner, char *name)
-{
-	struct class *class;
-	int err;
-
-	class = class_create(owner, name);
-	if (IS_ERR(class)) {
-		err = PTR_ERR(class);
-		goto err_out;
-	}
-
-	class->suspend = drm_class_suspend;
-	class->resume = drm_class_resume;
-
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,34))
-	err = class_create_file(class, &class_attr_version);
-#else
-	err = class_create_file(class, &class_attr_version.attr);
-#endif
-	if (err)
-		goto err_out_class;
-
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,32))
-	class->devnode = drm_devnode;
-#endif
-
-	return class;
-
-err_out_class:
-	class_destroy(class);
-err_out:
-	return ERR_PTR(err);
-}
-
-/**
- * drm_sysfs_destroy - destroys DRM class
- *
- * Destroy the DRM device class.
- */
-void drm_sysfs_destroy(void)
-{
-	if ((drm_class == NULL) || (IS_ERR(drm_class)))
-		return;
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,34))
-	class_remove_file(drm_class, &class_attr_version);
-#else
-	class_remove_file(drm_class, &class_attr_version.attr);
-#endif
-	class_destroy(drm_class);
-}
-
-/**
  * drm_sysfs_device_release - do nothing
  * @dev: Linux device
  *
@@ -402,7 +266,6 @@ int drm_sysfs_connector_add(struct drm_connector *connector)
 	BUG_ON(device_is_registered(&connector->kdev));
 
 	connector->kdev.parent = &dev->primary->kdev;
-	connector->kdev.class = drm_class;
 	connector->kdev.release = drm_sysfs_device_release;
 
 	DRM_DEBUG("adding \"%s\" to sysfs\n",
@@ -415,7 +278,7 @@ int drm_sysfs_connector_add(struct drm_connector *connector)
 	dev_set_name(&connector->kdev, drm_get_connector_name(connector),
 		     dev->primary->index);
 #endif
-	ret = device_register(&connector->kdev);
+	ret = drm_class_device_register(&connector->kdev);
 
 	if (ret) {
 		DRM_ERROR("failed to register connector device: %d\n", ret);
@@ -466,7 +329,7 @@ err_out_files:
 		device_remove_file(&connector->kdev, &connector_attrs_opt1[i]);
 	for (i = 0; i < attr_cnt; i++)
 		device_remove_file(&connector->kdev, &connector_attrs[i]);
-	device_unregister(&connector->kdev);
+	drm_class_device_unregister(&connector->kdev);
 
 out:
 	return ret;
@@ -496,7 +359,7 @@ void drm_sysfs_connector_remove(struct drm_connector *connector)
 	for (i = 0; i < ARRAY_SIZE(connector_attrs); i++)
 		device_remove_file(&connector->kdev, &connector_attrs[i]);
 	sysfs_remove_bin_file(&connector->kdev.kobj, &edid_attr);
-	device_unregister(&connector->kdev);
+	drm_class_device_unregister(&connector->kdev);
 }
 EXPORT_SYMBOL(drm_sysfs_connector_remove);
 
@@ -535,7 +398,6 @@ int drm_sysfs_device_add(struct drm_minor *minor)
 
 	minor->kdev.parent = minor->dev->dev;
 
-	minor->kdev.class = drm_class;
 	minor->kdev.release = drm_sysfs_device_release;
 	minor->kdev.devt = minor->device;
 	minor->kdev.type = &drm_sysfs_device_minor;
@@ -551,15 +413,16 @@ int drm_sysfs_device_add(struct drm_minor *minor)
 #else
 	dev_set_name(&minor->kdev, minor_str, minor->index);
 #endif
-	err = device_register(&minor->kdev);
+	err = drm_class_device_register(&minor->kdev);
 	if (err) {
-		DRM_ERROR("device add failed: %d\n", err);
+		DRM_DEBUG("device add failed: %d\n", err);
 		goto err_out;
 	}
 
 	return 0;
 
 err_out:
+	put_device(&minor->kdev);
 	return err;
 }
 
@@ -572,29 +435,5 @@ err_out:
  */
 void drm_sysfs_device_remove(struct drm_minor *minor)
 {
-	device_unregister(&minor->kdev);
+	drm_class_device_unregister(&minor->kdev);
 }
-
-
-/**
- * drm_class_device_register - Register a struct device in the drm class.
- *
- * @dev: pointer to struct device to register.
- *
- * @dev should have all relevant members pre-filled with the exception
- * of the class member. In particular, the device_type member must
- * be set.
- */
-
-int drm_class_device_register(struct device *dev)
-{
-	dev->class = drm_class;
-	return device_register(dev);
-}
-EXPORT_SYMBOL_GPL(drm_class_device_register);
-
-void drm_class_device_unregister(struct device *dev)
-{
-	return device_unregister(dev);
-}
-EXPORT_SYMBOL_GPL(drm_class_device_unregister);
