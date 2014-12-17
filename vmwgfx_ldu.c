@@ -379,6 +379,12 @@ static int vmw_ldu_init(struct vmw_private *dev_priv, unsigned unit)
 	drm_connector_attach_property(connector,
 				      dev->mode_config.dirty_info_property,
 				      1);
+	drm_connector_attach_property(connector,
+				      dev_priv->hotplug_mode_update_property, 1);
+	drm_connector_attach_property(connector,
+				      dev->mode_config.suggested_x_property, 0);
+	drm_connector_attach_property(connector,
+				      dev->mode_config.suggested_y_property, 0);
 
 	return 0;
 }

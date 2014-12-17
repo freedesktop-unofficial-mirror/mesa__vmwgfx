@@ -1410,6 +1410,22 @@ int vmw_kms_readback(struct vmw_private *dev_priv,
 	return ret;
 }
 
+static void
+vmw_kms_create_hotplug_mode_update_property(struct vmw_private *dev_priv)
+{
+	if (dev_priv->hotplug_mode_update_property)
+		return;
+
+	dev_priv->hotplug_mode_update_property =
+		drm_property_create_range(dev_priv->dev,
+					  DRM_MODE_PROP_IMMUTABLE,
+					  "hotplug_mode_update", 0, 1);
+
+	if (!dev_priv->hotplug_mode_update_property)
+		return;
+
+}
+
 int vmw_kms_init(struct vmw_private *dev_priv)
 {
 	struct drm_device *dev = dev_priv->dev;
@@ -1425,6 +1441,9 @@ int vmw_kms_init(struct vmw_private *dev_priv)
 	dev->mode_config.preferred_depth = 32;
 	dev->mode_config.prefer_shadow = 0;
 	dev->mode_config.async_page_flip = 1;
+
+	drm_mode_create_suggested_offset_properties(dev);
+	vmw_kms_create_hotplug_mode_update_property(dev_priv);
 
 	ret = vmw_kms_init_screen_object_display(dev_priv);
 	if (ret) /* Fallback */
@@ -1655,15 +1674,28 @@ int vmw_du_update_layout(struct vmw_private *dev_priv, unsigned num,
 			du->pref_active = true;
 			du->gui_x = rects[du->unit].x;
 			du->gui_y = rects[du->unit].y;
+			drm_connector_property_set_value
+			  (con, dev->mode_config.suggested_x_property,
+			   du->gui_x);
+			drm_connector_property_set_value
+			  (con, dev->mode_config.suggested_y_property,
+			   du->gui_y);
 		} else {
 			du->pref_width = 800;
 			du->pref_height = 600;
 			du->pref_active = false;
+			drm_connector_property_set_value
+			  (con, dev->mode_config.suggested_x_property, 0);
+			drm_connector_property_set_value
+			  (con, dev->mode_config.suggested_y_property, 0);
 		}
 		con->status = vmw_du_connector_detect(con, false);
+
 	}
 
 	mutex_unlock(&dev->mode_config.mutex);
+	drm_sysfs_hotplug_event(dev);
+
 
 	return 0;
 }
