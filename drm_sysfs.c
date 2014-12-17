@@ -275,8 +275,9 @@ int drm_sysfs_connector_add(struct drm_connector *connector)
 		 dev->primary->index,
 		 drm_get_connector_name(connector));
 #else
-	dev_set_name(&connector->kdev, drm_get_connector_name(connector),
-		     dev->primary->index);
+	dev_set_name(&connector->kdev, "card%d-%s",
+		     dev->primary->index,
+		     drm_get_connector_name(connector));
 #endif
 	ret = drm_class_device_register(&connector->kdev);
 
