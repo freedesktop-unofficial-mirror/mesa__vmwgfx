@@ -473,8 +473,8 @@ int dma_buf_fd(struct dma_buf *dmabuf, int flags);
 
 #endif
 
-/* set_need_resched() disappeared in linux 3.17. Temporary fix. */
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 17, 0))
+/* set_need_resched() disappeared in linux 3.16. Temporary fix. */
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 16, 0))
 #define set_need_resched()
 #endif
 
