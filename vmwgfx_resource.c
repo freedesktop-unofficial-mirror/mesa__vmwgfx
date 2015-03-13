@@ -1634,6 +1634,7 @@ int vmw_resource_pin(struct vmw_resource *res)
 	struct vmw_private *dev_priv = res->dev_priv;
 	int ret;
 
+	ttm_write_lock(&dev_priv->reservation_sem, false);
 	mutex_lock(&dev_priv->cmdbuf_mutex);
 	ret = vmw_resource_reserve(res, false);
 	if (ret)
@@ -1668,6 +1669,7 @@ out_no_validate:
 	vmw_resource_unreserve(res, NULL, 0UL);
 out_no_reserve:
 	mutex_unlock(&dev_priv->cmdbuf_mutex);
+	ttm_write_unlock(&dev_priv->reservation_sem);
 
 	return ret;
 }
@@ -1685,6 +1687,7 @@ void vmw_resource_unpin(struct vmw_resource *res)
 	struct vmw_private *dev_priv = res->dev_priv;
 	int ret;
 
+	ttm_read_lock(&dev_priv->reservation_sem, false);
 	mutex_lock(&dev_priv->cmdbuf_mutex);
 
 	ret = vmw_resource_reserve(res, true);
@@ -1702,4 +1705,5 @@ void vmw_resource_unpin(struct vmw_resource *res)
 	vmw_resource_unreserve(res, NULL, 0UL);
 
 	mutex_unlock(&dev_priv->cmdbuf_mutex);
+	ttm_read_unlock(&dev_priv->reservation_sem);
 }
