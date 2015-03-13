@@ -75,6 +75,9 @@ struct ttm_lock {
 	bool kill_takers;
 	int signal;
 	struct ttm_object_file *vt_holder;
+#ifdef CONFIG_DEBUG_LOCK_ALLOC
+	struct lockdep_map dep_map;
+#endif
 };
 
 
@@ -84,7 +87,8 @@ struct ttm_lock {
  * @lock: Pointer to a struct ttm_lock
  * Initializes the lock.
  */
-extern void ttm_lock_init(struct ttm_lock *lock);
+extern void __ttm_lock_init(struct ttm_lock *lock, const char *name,
+			    struct lock_class_key *key);
 
 /**
  * ttm_read_unlock
@@ -243,5 +247,12 @@ static inline void ttm_lock_set_kill(struct ttm_lock *lock, bool val,
 	if (val)
 		lock->signal = signal;
 }
+
+#define ttm_lock_init(lock)			\
+do {						\
+	static struct lock_class_key __key;	\
+						\
+	__ttm_lock_init((lock), #lock, &__key);	\
+} while (0)
 
 #endif

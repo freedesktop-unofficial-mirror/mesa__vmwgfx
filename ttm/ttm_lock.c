@@ -42,8 +42,12 @@
 #define TTM_VT_LOCK               (1 << 3)
 #define TTM_SUSPEND_LOCK          (1 << 4)
 
-void ttm_lock_init(struct ttm_lock *lock)
+void __ttm_lock_init(struct ttm_lock *lock, const char *name,
+	struct lock_class_key *key)
 {
+#ifdef CONFIG_DEBUG_LOCK_ALLOC
+	lockdep_init_map(&lock->dep_map, name, key, 0);
+#endif
 	spin_lock_init(&lock->lock);
 	init_waitqueue_head(&lock->queue);
 	lock->rw = 0;
@@ -51,10 +55,11 @@ void ttm_lock_init(struct ttm_lock *lock)
 	lock->kill_takers = false;
 	lock->signal = SIGKILL;
 }
-EXPORT_SYMBOL(ttm_lock_init);
+EXPORT_SYMBOL(__ttm_lock_init);
 
 void ttm_read_unlock(struct ttm_lock *lock)
 {
+	lock_release(&lock->dep_map, 1, _RET_IP_);
 	spin_lock(&lock->lock);
 	if (--lock->rw == 0)
 		wake_up_all(&lock->queue);
@@ -84,60 +89,25 @@ int ttm_read_lock(struct ttm_lock *lock, bool interruptible)
 {
 	int ret = 0;
 
+	lock_acquire(&lock->dep_map, 0, 0, 1, 1, NULL, _RET_IP_);
 	if (interruptible)
 		ret = wait_event_interruptible(lock->queue,
 					       __ttm_read_lock(lock));
 	else
 		wait_event(lock->queue, __ttm_read_lock(lock));
+
+	if (ret)
+		lock_release(&lock->dep_map, 0, _RET_IP_);
+	else
+		lock_acquired(&lock->dep_map, _RET_IP_);
+
 	return ret;
 }
 EXPORT_SYMBOL(ttm_read_lock);
 
-static bool __ttm_read_trylock(struct ttm_lock *lock, bool *locked)
-{
-	bool block = true;
-
-	*locked = false;
-
-	spin_lock(&lock->lock);
-	if (unlikely(lock->kill_takers)) {
-		send_sig(lock->signal, current, 0);
-		spin_unlock(&lock->lock);
-		return false;
-	}
-	if (lock->rw >= 0 && lock->flags == 0) {
-		++lock->rw;
-		block = false;
-		*locked = true;
-	} else if (lock->flags == 0) {
-		block = false;
-	}
-	spin_unlock(&lock->lock);
-
-	return !block;
-}
-
-int ttm_read_trylock(struct ttm_lock *lock, bool interruptible)
-{
-	int ret = 0;
-	bool locked;
-
-	if (interruptible)
-		ret = wait_event_interruptible
-			(lock->queue, __ttm_read_trylock(lock, &locked));
-	else
-		wait_event(lock->queue, __ttm_read_trylock(lock, &locked));
-
-	if (unlikely(ret != 0)) {
-		BUG_ON(locked);
-		return ret;
-	}
-
-	return (locked) ? 0 : -EBUSY;
-}
-
 void ttm_write_unlock(struct ttm_lock *lock)
 {
+	lock_release(&lock->dep_map, 1, _RET_IP_);
 	spin_lock(&lock->lock);
 	lock->rw = 0;
 	wake_up_all(&lock->queue);
@@ -170,6 +140,8 @@ int ttm_write_lock(struct ttm_lock *lock, bool interruptible)
 {
 	int ret = 0;
 
+	lock_acquire(&lock->dep_map, 0, 0, 0, 1, NULL, _RET_IP_);
+
 	if (interruptible) {
 		ret = wait_event_interruptible(lock->queue,
 					       __ttm_write_lock(lock));
@@ -180,7 +152,12 @@ int ttm_write_lock(struct ttm_lock *lock, bool interruptible)
 			spin_unlock(&lock->lock);
 		}
 	} else
-		wait_event(lock->queue, __ttm_read_lock(lock));
+		wait_event(lock->queue, __ttm_write_lock(lock));
+
+	if (ret)
+		lock_release(&lock->dep_map, 0, _RET_IP_);
+	else
+		lock_acquired(&lock->dep_map, _RET_IP_);
 
 	return ret;
 }
@@ -241,6 +218,8 @@ int ttm_vt_lock(struct ttm_lock *lock,
 {
 	int ret = 0;
 
+	might_lock(lock);
+
 	if (interruptible) {
 		ret = wait_event_interruptible(lock->queue,
 					       __ttm_vt_lock(lock));
@@ -249,6 +228,7 @@ int ttm_vt_lock(struct ttm_lock *lock,
 			lock->flags &= ~TTM_VT_LOCK_PENDING;
 			wake_up_all(&lock->queue);
 			spin_unlock(&lock->lock);
+			lock_release(&lock->dep_map, 0, _RET_IP_);
 			return ret;
 		}
 	} else
@@ -273,6 +253,7 @@ EXPORT_SYMBOL(ttm_vt_lock);
 
 int ttm_vt_unlock(struct ttm_lock *lock)
 {
+
 	return ttm_ref_object_base_unref(lock->vt_holder,
 					 lock->base.hash.key, TTM_REF_USAGE);
 }
@@ -305,6 +286,8 @@ static bool __ttm_suspend_lock(struct ttm_lock *lock)
 
 void ttm_suspend_lock(struct ttm_lock *lock)
 {
+	might_lock(lock);
+
 	wait_event(lock->queue, __ttm_suspend_lock(lock));
 }
 EXPORT_SYMBOL(ttm_suspend_lock);
